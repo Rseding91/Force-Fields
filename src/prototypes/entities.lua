@@ -761,10 +761,10 @@ addForceField("green", 700)
 addForceField("purple", 150)
 addForceField("red", 300, baseSourceAttackReaction)
 
-addForceFieldGate("blue", 300)
-addForceFieldGate("green", 700)
-addForceFieldGate("purple", 150)
-addForceFieldGate("red", 300, baseSourceAttackReaction)
+--addForceFieldGate("blue", 300)
+--addForceFieldGate("green", 700)
+--addForceFieldGate("purple", 150)
+--addForceFieldGate("red", 300, baseSourceAttackReaction)
 
 data:extend(
 {
@@ -859,8 +859,8 @@ data:extend(
 		{
 			filename = "__Force Fields__/graphics/null.png",
 			priority = "low",
-			frame_width = 32,
-			frame_height = 32,
+			width = 32,
+			height = 32,
 			frame_count = 1,
 			width = 32,
 			height = 32,
@@ -913,8 +913,8 @@ data:extend(
 		{
 			filename = "__Force Fields__/graphics/null.png",
 			priority = "low",
-			frame_width = 32,
-			frame_height = 32,
+			width = 32,
+			height = 32,
 			frame_count = 1,
 			width = 32,
 			height = 32,

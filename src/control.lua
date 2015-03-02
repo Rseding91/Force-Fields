@@ -75,47 +75,6 @@ local forcefieldTypes =
 		energyPerRespawn = 50000,
 		energyPerHealthLost = 40000,
 		damageWhenMined = 99
-	},
-	
-	["blue" .. fieldgateSuffix] =
-	{
-		chargeRate = 0.1736111111111111,
-		degradeRate = 2.777777777777778,
-		respawnRate = 1,
-		energyPerCharge = 4000,
-		energyPerRespawn = 5000,
-		energyPerHealthLost = 15000,
-		damageWhenMined = 20
-	},
-	["green" .. fieldgateSuffix] =
-	{
-		chargeRate = 0.125,
-		degradeRate = 2,
-		respawnRate = 1,
-		energyPerCharge = 4000,
-		energyPerRespawn = 10000,
-		energyPerHealthLost = 20000,
-		damageWhenMined = 30
-	},
-	["purple" .. fieldgateSuffix] =
-	{
-		chargeRate = 0.2083333333333334,
-		degradeRate = 3.333333333333333,
-		respawnRate = 1,
-		energyPerCharge = 6000,
-		energyPerRespawn = 5000,
-		energyPerHealthLost = 25000,
-		damageWhenMined = 15
-	},
-	["red" .. fieldgateSuffix] =
-	{
-		chargeRate = 0.125,
-		degradeRate = 4.333333333333333,
-		respawnRate = 6,
-		energyPerCharge = 10000,
-		energyPerRespawn = 50000,
-		energyPerHealthLost = 40000,
-		damageWhenMined = 60
 	}
 }
 
@@ -126,6 +85,8 @@ remote.addinterface("forcefields", {
 		for _,player in pairs(game.players) do
 			transferToPlayer(player, {name = "forcefield-emitter", count = 50})
 			transferToPlayer(player, {name = "forcefield-tool", count = 2})
+			transferToPlayer(player, {name = "processing-unit", count = 50})
+			transferToPlayer(player, {name = "advanced-circuit", count = 50})
 		end
 	end,
 	reset = function()
@@ -313,7 +274,7 @@ function dropOnGround(position, dropStack, markForDeconstruction)
 		if dropPos then
 			entity = game.createentity({name = "item-on-ground", position = dropPos, stack = {name = dropStack.name, count = 1}})
 			if markForDeconstruction then
-				entity.orderdeconstruction(game.player.force)
+				entity.orderdeconstruction(game.players[1].force)
 			end
 		end
 	end
@@ -360,16 +321,16 @@ function onEmitterMined(emitter, playerIndex)
 	
 	if emitterTable["12"] ~= 0 then
 		if player then
-			transferToPlayer(player, {name = "processing-unit", count = emitterTable["12"]})
+			transferToPlayer(player, {name = "advanced-circuit", count = emitterTable["12"]})
 		else
-			dropOnGround(emitterTable["1"].position, {name = "processing-unit", count = emitterTable["12"]}, true)
+			dropOnGround(emitterTable["1"].position, {name = "advanced-circuit", count = emitterTable["12"]}, true)
 		end
 	end
 	if emitterTable["13"] ~= 0 then
 		if player then
 			transferToPlayer(player, {name = "processing-unit", count = emitterTable["13"]})
 		else
-			dropOnGround(emitterTable["1"].position, {name = "advanced-circuit", count = emitterTable["13"]}, true)
+			dropOnGround(emitterTable["1"].position, {name = "processing-unit", count = emitterTable["13"]}, true)
 		end
 	end
 end
@@ -1242,7 +1203,7 @@ function handleGUIUpgradeButtons(event)
 				if count == 0 then
 					--Broken in 0.11.3
 					--upgradeButton.style = "noitem"
-					upgradeButton.caption = ""
+					--upgradeButton.caption = ""
 					
 					-- Work-around
 					local distanceCaption = upgrades.distanceUpgrades.caption
@@ -1252,6 +1213,12 @@ function handleGUIUpgradeButtons(event)
 					local widthStyle
 					upgrades.distanceUpgrades.destroy()
 					upgrades.widthUpgrades.destroy()
+					
+					if whichButton == "distanceUpgrades" then
+						distanceCaption = ""
+					else
+						widthCaption = ""
+					end
 					
 					if distanceCaption == "" then
 						distanceStyle = "noitem"
@@ -1504,7 +1471,9 @@ function showEmitterGui(emitterTable, playerIndex)
 		for index,player in pairs(game.players) do
 			--if index ~= playerIndex then
 				if glob.emitterConfigGUIs["I" .. index] ~= nil and glob.emitterConfigGUIs["I" .. index][1] == emitterTable then
-					game.players[playerIndex].print(player.name .. " (player " .. index .. ") has the GUI for this emitter open right now.")
+					if index ~= playerIndex then
+						game.players[playerIndex].print(player.name .. " (player " .. index .. ") has the GUI for this emitter open right now.")
+					end
 					canOpenGUI = false
 				end
 			--end
