@@ -1,0 +1,9 @@
+{
+  "name": "Force Fields",
+  "version": "1.0.0",
+  "title": "Force Fields",
+  "author": "Rseding91",
+  "homepage": "",
+  "dependencies": ["base >= 0.11"],
+  "description": "Electric powered walls."
+}
