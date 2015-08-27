@@ -80,7 +80,7 @@ local forcefieldTypes =
 
 
 
-remote.addinterface("forcefields", {
+remote.add_interface("forcefields", {
 	test = function()
 		for _,player in pairs(game.players) do
 			transferToPlayer(player, {name = "forcefield-emitter", count = 50})
@@ -90,20 +90,20 @@ remote.addinterface("forcefields", {
 		end
 	end,
 	reset = function()
-		glob.emitters = nil
-		glob.fields = nil
-		glob.searchDamagedPos = nil
-		glob.activeEmitters = nil
-		glob.degradingFields = nil
-		glob.ticking = nil
-		glob.emitterConfigGUIs = nil
-		game.onevent(defines.events.ontick, nil)
+		global.emitters = nil
+		global.fields = nil
+		global.searchDamagedPos = nil
+		global.activeEmitters = nil
+		global.degradingFields = nil
+		global.ticking = nil
+		global.emitterConfigGUIs = nil
+		game.on_event(defines.events.on_tick, nil)
 		local entities
 		local minx = 0
 		local miny = 0
 		local maxx = 0
 		local maxy = 0
-		for coord in game.getchunks() do
+		for coord in game.get_chunks() do
 			if coord.x < minx then
 				minx = coord.x
 			end
@@ -121,16 +121,16 @@ remote.addinterface("forcefields", {
 		maxx = maxx * 32
 		miny = miny * 32
 		maxy = maxy * 32
-		for name in pairs(forcefieldTypes) do
-			entities = game.findentitiesfiltered({area = {{minx, miny}, {maxx, maxy}}, name = name})
-			for _,v in pairs(entities) do
-				v.destroy()
-			end
-		end
-		entities = game.findentitiesfiltered({area = {{minx, miny}, {maxx, maxy}}, name = emitterName})
-		for _,v in pairs(entities) do
-			v.destroy()
-		end
+    for k,surface in pairs(game.surfaces) do
+      for name in pairs(forcefieldTypes) do
+        for _,v in pairs(surface.find_entities_filtered({area = {{minx, miny}, {maxx, maxy}}, name = name})) do
+          v.destroy()
+        end
+      end
+      for _,v in pairs(surface.find_entities_filtered({area = {{minx, miny}, {maxx, maxy}}, name = emitterName})) do
+        v.destroy()
+      end
+    end
 		for _,player in pairs(game.players) do
 			if player.gui.center.emitterConfig ~= nil then
 				player.gui.center.emitterConfig.destroy()
@@ -139,14 +139,16 @@ remote.addinterface("forcefields", {
 	end
 })
 
-game.onevent(defines.events.onplayercreated, function(event)
+--[[
+game.on_event(defines.events.on_player_created, function(event)
 	for _,player in pairs(game.players) do
 		if player.gui.center.emitterConfig ~= nil then
 			player.gui.center.emitterConfig.destroy()
 		end
 	end
-	glob.emitterConfigGUIs = nil
+	global.emitterConfigGUIs = nil
 end)
+]]--
 
 function throwError(what)
 	for _,player in pairs(game.players) do
@@ -184,10 +186,10 @@ function verifySettings()
 		maxFieldDistance = math.max(emitterMaxDistance, emitterMaxWidth)
 	end
 	
-	local entityPrototypes = game.entityprototypes
+	local entityPrototypes = game.entity_prototypes
 	for name,fieldTable in pairs(forcefieldTypes) do
 		if entityPrototypes[name] ~= nil then
-			fieldTable["maxHealth"] = entityPrototypes[name].maxhealth
+			fieldTable["maxHealth"] = entityPrototypes[name].max_health
 		else
 			throwError("Invalid field name defined - no matching prototype exists: " .. name)
 		end
@@ -199,35 +201,35 @@ function verifySettings()
 	end
 end
 
-function onload()
+function on_load()
 	if not loaded then
 		loaded = true
-		if glob.ticking then
-			game.onevent(defines.events.ontick, ticker)
+		if global.ticking then
+			game.on_event(defines.events.on_tick, ticker)
 		end
 		verifySettings()
-		glob.version = 1.0
+		global.version = 1.0
 	end
 end
 
-game.onload(onload)
-game.oninit(onload)
+game.on_load(on_load)
+game.on_init(on_load)
 
-game.onevent(defines.events.onpreplayermineditem, function(event)
+game.on_event(defines.events.on_preplayer_mined_item, function(event)
 	if forcefieldTypes[event.entity.name] ~= nil then
-		onForcefieldMined(event.entity, event.playerindex)
+		onForcefieldMined(event.entity, event.player_index)
 	elseif event.entity.name == emitterName then
-		onEmitterMined(event.entity, event.playerindex)
+		onEmitterMined(event.entity, event.player_index)
 	end
 end)
 
-game.onevent(defines.events.onrobotpremined, function(event)
+game.on_event(defines.events.on_robot_pre_mined, function(event)
 	if event.entity.name == emitterName then
 		onEmitterMined(event.entity)
 	end
 end)
 
-game.onevent(defines.events.onentitydied, function(event)
+game.on_event(defines.events.on_entity_died, function(event)
 	if forcefieldTypes[event.entity.name] ~= nil then
 		onForcefieldDied(event.entity)
 	elseif event.entity.name == emitterName then
@@ -235,7 +237,7 @@ game.onevent(defines.events.onentitydied, function(event)
 	end
 end)
 
-game.onevent(defines.events.onmarkedfordeconstruction, function(event)
+game.on_event(defines.events.on_marked_for_deconstruction, function(event)
 	if event.entity.name == emitterName then
 		local emitterTable = findEmitter(event.entity)
 		if emitterTable ~= nil then
@@ -245,7 +247,7 @@ game.onevent(defines.events.onmarkedfordeconstruction, function(event)
 	end
 end)
 
-game.onevent(defines.events.oncanceleddeconstruction, function(event)
+game.on_event(defines.events.on_canceled_deconstruction, function(event)
 	if event.entity.name == emitterName then
 		local emitterTable = findEmitter(event.entity)
 		if emitterTable ~= nil then
@@ -256,25 +258,25 @@ game.onevent(defines.events.oncanceleddeconstruction, function(event)
 end)
 
 function transferToPlayer(player, dropStack)
-	local countBefore = player.getitemcount(dropStack.name)
+	local countBefore = player.get_item_count(dropStack.name)
 	local countAfter
 	
 	player.insert(dropStack)
-	countAfter = player.getitemcount(dropStack.name)
+	countAfter = player.get_item_count(dropStack.name)
 	if countAfter < (countBefore + dropStack.count) then
-		dropOnGround(player.position, {name = dropStack.name, count = (countBefore + dropStack.count) - countAfter})
+		dropOnGround(player.surface, player.position, {name = dropStack.name, count = (countBefore + dropStack.count) - countAfter})
 	end
 end
 
-function dropOnGround(position, dropStack, markForDeconstruction)
+function dropOnGround(surface, position, dropStack, markForDeconstruction, force)
 	local dropPos
 	local entity
 	for n=1,dropStack.count do
-		dropPos = game.findnoncollidingposition("item-on-ground", position, 50, 0.5)
+		dropPos = surface.find_non_colliding_position("item-on-ground", position, 50, 0.5)
 		if dropPos then
-			entity = game.createentity({name = "item-on-ground", position = dropPos, stack = {name = dropStack.name, count = 1}})
+			entity = surface.create_entity({name = "item-on-ground", position = dropPos, stack = {name = dropStack.name, count = 1}})
 			if markForDeconstruction then
-				entity.orderdeconstruction(game.players[1].force)
+				entity.order_deconstruction(force)
 			end
 		end
 	end
@@ -282,21 +284,22 @@ end
 
 function storeKilledEmitter(emitterTable)
 	local newKilledEmitter = {}
-	if glob.killedEmitters == nil then
-		glob.killedEmitters = {}
+	if global.killedEmitters == nil then
+		global.killedEmitters = {}
 	end
+  newKilledEmitter["0"] = emitterTable["1"].surface
 	newKilledEmitter["1"] = emitterTable["1"].position
 	newKilledEmitter["2"] = emitterTable["6"]
 	newKilledEmitter["3"] = emitterTable["7"]
 	newKilledEmitter["4"] = emitterTable["9"]
 	newKilledEmitter["5"] = emitterTable["10"]
-	table.insert(glob.killedEmitters, newKilledEmitter)
+	table.insert(global.killedEmitters, newKilledEmitter)
 end
 
 function removeKilledEmitter(index)
-	table.remove(glob.killedEmitters, index)
-	if #glob.killedEmitters == 0 then
-		glob.killedEmitters = nil
+	table.remove(global.killedEmitters, index)
+	if #global.killedEmitters == 0 then
+		global.killedEmitters = nil
 	end
 end
 
@@ -323,29 +326,29 @@ function onEmitterMined(emitter, playerIndex)
 		if player then
 			transferToPlayer(player, {name = "advanced-circuit", count = emitterTable["12"]})
 		else
-			dropOnGround(emitterTable["1"].position, {name = "advanced-circuit", count = emitterTable["12"]}, true)
+			dropOnGround(emitterTable["1"].surface, emitterTable["1"].position, {name = "advanced-circuit", count = emitterTable["12"]}, true, emitterTable["1"].force)
 		end
 	end
 	if emitterTable["13"] ~= 0 then
 		if player then
 			transferToPlayer(player, {name = "processing-unit", count = emitterTable["13"]})
 		else
-			dropOnGround(emitterTable["1"].position, {name = "processing-unit", count = emitterTable["13"]}, true)
+			dropOnGround(emitterTable["1"].surface, emitterTable["1"].position, {name = "processing-unit", count = emitterTable["13"]}, true, emitterTable["1"].force)
 		end
 	end
 end
 
-function onForcefieldMined(field, playerindex)
-	if playerindex ~= nil then
-		local player = game.players[playerindex]
+function onForcefieldMined(field, player_index)
+	if player_index ~= nil then
+		local player = game.players[player_index]
 		if player.character ~= nil then
 			player.character.damage(forcefieldTypes[field.name]["damageWhenMined"], game.forces.player)
 		end
 	end
-	if glob.fields ~= nil then
+	if global.fields ~= nil then
 		local pos = field.position
-		if glob.fields[pos.x] ~= nil and glob.fields[pos.x][pos.y] ~= nil then
-			local emitterTable = glob.emitters[glob.fields[pos.x][pos.y]]
+		if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] ~= nil then
+			local emitterTable = global.emitters[global.fields[pos.x][pos.y]]
 			if emitterTable then
 				setActive(emitterTable, true)
 			end
@@ -379,8 +382,8 @@ function directionToString(direction)
 end
 
 function findEmitter(emitter)
-	if glob.emitters ~= nil then
-		for k,v in pairs(glob.emitters) do
+	if global.emitters ~= nil then
+		for k,v in pairs(global.emitters) do
 			if v["1"].equals(emitter) then
 				return v
 			end
@@ -396,13 +399,13 @@ function removeEmitter(emitter)
 end
 
 function removeEmitterID(emitterID)
-	if glob.emitters ~= nil then
-		if glob.emitters[emitterID] ~= nil then
-			degradeLinkedFields(glob.emitters[emitterID])
-			glob.emitters[emitterID] = nil
-			if tableIsEmpty(glob.emitters) then
-				glob.emitters = nil
-				glob.emitterNEI = nil
+	if global.emitters ~= nil then
+		if global.emitters[emitterID] ~= nil then
+			degradeLinkedFields(global.emitters[emitterID])
+			global.emitters[emitterID] = nil
+			if tableIsEmpty(global.emitters) then
+				global.emitters = nil
+				global.emitterNEI = nil
 			else
 				return true
 			end
@@ -411,11 +414,11 @@ function removeEmitterID(emitterID)
 end
 
 function removeActiveEmitterID(activeEmitterID)
-	-- Returns true if the glob.activeEmitters table isn't empty
-	if glob.activeEmitters ~= nil then
-		table.remove(glob.activeEmitters, activeEmitterID)
-		if #glob.activeEmitters == 0 then
-			glob.activeEmitters = nil
+	-- Returns true if the global.activeEmitters table isn't empty
+	if global.activeEmitters ~= nil then
+		table.remove(global.activeEmitters, activeEmitterID)
+		if #global.activeEmitters == 0 then
+			global.activeEmitters = nil
 		else
 			return true
 		end
@@ -423,9 +426,9 @@ function removeActiveEmitterID(activeEmitterID)
 end
 
 function removeForcefield(field)
-	if glob.fields ~= nil then
+	if global.fields ~= nil then
 		local pos = field.position
-		if glob.fields[pos.x] ~= nil and glob.fields[pos.x][pos.y] ~= nil then
+		if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] ~= nil then
 			removeForceFieldID(pos.x, pos.y)
 		end
 	end
@@ -434,21 +437,21 @@ end
 function removeForceFieldID(x, y)
 	-- Does no checking
 
-	glob.fields[x][y] = nil
-	if tableIsEmpty(glob.fields[x]) then
-		glob.fields[x] = nil
-		if tableIsEmpty(glob.fields) then
-			glob.fields = nil
+	global.fields[x][y] = nil
+	if tableIsEmpty(global.fields[x]) then
+		global.fields[x] = nil
+		if tableIsEmpty(global.fields) then
+			global.fields = nil
 		end
 	end
 end
 
 function removeDegradingFieldID(fieldID)
-	-- Returns true if the glob.degradingFields table isn't empty
-	if glob.degradingFields ~= nil then
-		local pos = glob.degradingFields[fieldID][2]
-		table.remove(glob.degradingFields, fieldID)
-		local emitters = game.findentitiesfiltered({area = {{x = pos.x - maxFieldDistance, y = pos.y - maxFieldDistance}, {x = pos.x + maxFieldDistance, y = pos.y + maxFieldDistance}}, name = emitterName})
+	-- Returns true if the global.degradingFields table isn't empty
+	if global.degradingFields ~= nil then
+		local pos = global.degradingFields[fieldID][2]
+		table.remove(global.degradingFields, fieldID)
+		local emitters = game.find_entities_filtered({area = {{x = pos.x - maxFieldDistance, y = pos.y - maxFieldDistance}, {x = pos.x + maxFieldDistance, y = pos.y + maxFieldDistance}}, name = emitterName})
 		local emitterTable
 		for _,emitter in pairs(emitters) do
 			emitterTable = findEmitter(emitter)
@@ -456,8 +459,8 @@ function removeDegradingFieldID(fieldID)
 				setActive(emitterTable, true)
 			end
 		end
-		if #glob.degradingFields == 0 then
-			glob.degradingFields = nil
+		if #global.degradingFields == 0 then
+			global.degradingFields = nil
 		else
 			return true
 		end
@@ -465,7 +468,7 @@ function removeDegradingFieldID(fieldID)
 end
 
 function degradeLinkedFields(emitterTable)
-	if glob.fields ~= nil then
+	if global.fields ~= nil then
 		local pos1, xInc, yInc, incTimes = getFieldsArea(emitterTable)
 		local pos2 = {x = pos1.x + (xInc * incTimes), y = pos1.y + (yInc * incTimes)}
 		local fields
@@ -476,24 +479,24 @@ function degradeLinkedFields(emitterTable)
 		end
 		
 		if fields then
-			if glob.degradingFields == nil then
-				glob.degradingFields = {}
+			if global.degradingFields == nil then
+				global.degradingFields = {}
 			end
 			
 			for k,field in pairs(fields) do
 				pos = field.position
-				if glob.fields[pos.x] ~= nil and glob.fields[pos.x][pos.y] == emitterTable["5"] then
-					table.insert(glob.degradingFields, {[1] = field, [2] = field.position})
+				if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] == emitterTable["5"] then
+					table.insert(global.degradingFields, {[1] = field, [2] = field.position})
 					removeForcefield(field)
 					
-					if glob.fields == nil then
+					if global.fields == nil then
 						break
 					end
 				end
 			end
 			
-			if #glob.degradingFields == 0 then
-				glob.degradingFields = nil
+			if #global.degradingFields == 0 then
+				global.degradingFields = nil
 			else
 				activateTicker()
 			end
@@ -502,24 +505,24 @@ function degradeLinkedFields(emitterTable)
 end
 
 function entityBuilt(event)
-	if event.createdentity.name == toolName then
-		local position = event.createdentity.position
-		if event.playerindex ~= nil then
-			game.players[event.playerindex].insert({name = toolName, count = 1})
+	if event.created_entity.name == toolName then
+		local position = event.created_entity.position
+		if event.player_index ~= nil then
+			game.players[event.player_index].insert({name = toolName, count = 1})
 		else
-			game.createentity({name = "item-on-ground", position = position, stack = {name = toolName, count = 1}, force = game.forces.player})
+			game.create_entity({name = "item-on-ground", position = position, stack = {name = toolName, count = 1}, force = game.forces.player})
 		end
-		event.createdentity.destroy()
-		useTool(position, event.playerindex)
-	elseif event.createdentity.name == emitterName then
-		onEmitterBuilt(event.createdentity)
+		event.created_entity.destroy()
+		useTool(position, event.player_index)
+	elseif event.created_entity.name == emitterName then
+		onEmitterBuilt(event.created_entity)
 	end
 end
 
-game.onevent(defines.events.onbuiltentity, entityBuilt)
-game.onevent(defines.events.onrobotbuiltentity, entityBuilt)
+game.on_event(defines.events.on_built_entity, entityBuilt)
+game.on_event(defines.events.on_robot_built_entity, entityBuilt)
 
-game.onevent(defines.events.ontriggercreatedentity, function(event)
+game.on_event(defines.events.on_trigger_created_entity, function(event)
 	if event.entity.name == fieldDamagedTriggerName then
 		local position = event.entity.position
 		event.entity.destroy()
@@ -528,24 +531,24 @@ game.onevent(defines.events.ontriggercreatedentity, function(event)
 end)
 
 function ticker()
-	if glob.ticking == 0 then
-		glob.ticking = tickRate - 1
+	if global.ticking == 0 then
+		global.ticking = tickRate - 1
 		tick()
 	else
-		glob.ticking = glob.ticking - 1
+		global.ticking = global.ticking - 1
 	end
 end
 
 function tick()
 	local shouldKeepTicking
 	-- Active emitters tick
-	if glob.activeEmitters ~= nil then
+	if global.activeEmitters ~= nil then
 		local shouldRemainActive
 		local emitterTable
 		shouldKeepTicking = true
 		
 		-- For each active emitter check if they have fields to repair or fields to build
-		for k,emitterTable in pairs(glob.activeEmitters) do
+		for k,emitterTable in pairs(global.activeEmitters) do
 			if emitterTable["1"].valid then
 				shouldRemainActive = false
 				if emitterTable["14"] == false then
@@ -587,9 +590,9 @@ function tick()
 	end
 	
 	-- Degrading force fields tick - happens when a emitter dies or is mined.
-	if glob.degradingFields ~= nil then
+	if global.degradingFields ~= nil then
 		shouldKeepTicking = true
-		for k,v in pairs(glob.degradingFields) do
+		for k,v in pairs(global.degradingFields) do
 			if v[1].valid then
 				v[1].health = v[1].health - (forcefieldTypes[v[1].name]["degradeRate"] * tickRate)
 				if v[1].health == 0 then
@@ -606,9 +609,9 @@ function tick()
 		end
 	end
 	
-	if glob.searchDamagedPos ~= nil then
+	if global.searchDamagedPos ~= nil then
 		shouldKeepTicking = true
-		for sx,ys in pairs(glob.searchDamagedPos) do
+		for sx,ys in pairs(global.searchDamagedPos) do
 			for sy in pairs(ys) do
 				local foundFields = findForcefieldsRadius({x = sx + 0.5, y = sy + 0.5}, 0)
 				if foundFields ~= nil then
@@ -616,21 +619,21 @@ function tick()
 				end
 				table.remove(ys, sy)
 			end
-			table.remove(glob.searchDamagedPos, sx)
+			table.remove(global.searchDamagedPos, sx)
 		end
-		if #glob.searchDamagedPos == 0 then
-			glob.searchDamagedPos = nil
+		if #global.searchDamagedPos == 0 then
+			global.searchDamagedPos = nil
 		end
 	end
 	
 	if not shouldKeepTicking then
-		glob.ticking = nil
-		game.onevent(defines.events.ontick, nil)
+		global.ticking = nil
+		game.on_event(defines.events.on_tick, nil)
 	end
 end
 
 function useTool(pos, playerIndex)
-	local emitter = game.findentitiesfiltered({area = {{x = pos.x - toolRadius, y = pos.y - toolRadius}, {x = pos.x + toolRadius, y = pos.y + toolRadius}}, name = emitterName})
+	local emitter = game.find_entities_filtered({area = {{x = pos.x - toolRadius, y = pos.y - toolRadius}, {x = pos.x + toolRadius, y = pos.y + toolRadius}}, name = emitterName})
 	if #emitter ~= 0 then
 		local emitterTable = findEmitter(emitter[1])
 		if emitterTable ~= nil then
@@ -641,16 +644,16 @@ end
 
 function onEmitterBuilt(entity)
 	local newEmitter = {}
-	if glob.emitters == nil then
-		glob.emitters = {}
-		glob.emitterNEI = 1
+	if global.emitters == nil then
+		global.emitters = {}
+		global.emitterNEI = 1
 	end
 	
 	newEmitter["1"] = entity							-- emitter entity
 	newEmitter["2"] = false								-- is active
 	newEmitter["3"] = nil								-- damaged fields table (fields needing to be charged back to full health from damage)
 	newEmitter["4"] = true								-- check for building fields
-	newEmitter["5"] = "I" .. glob.emitterNEI			-- emitterID (the index the table is using in the glob.emitters table)
+	newEmitter["5"] = "I" .. global.emitterNEI			-- emitterID (the index the table is using in the global.emitters table)
 														-- used by fields to reference the emitter they're being powered from
 	newEmitter["6"] = emitterDefaultWidth				-- width the emitter is projecting at
 	newEmitter["7"] = emitterDefaultDistance			-- distance the emitter is projecting at
@@ -663,8 +666,8 @@ function onEmitterBuilt(entity)
 	newEmitter["14"] = false							-- is disabled
 	
 	-- Simulates reviving killed emitters
-	if glob.killedEmitters ~= nil then
-		for k,killedEmitter in pairs(glob.killedEmitters) do
+	if global.killedEmitters ~= nil then
+		for k,killedEmitter in pairs(global.killedEmitters) do
 			if killedEmitter["1"].x == entity.position.x and killedEmitter["1"].y == entity.position.y then
 				newEmitter["6"] = killedEmitter["2"]
 				newEmitter["7"] = killedEmitter["3"]
@@ -677,8 +680,8 @@ function onEmitterBuilt(entity)
 	end
 	
 	
-	glob.emitters["I" .. glob.emitterNEI] = newEmitter
-	glob.emitterNEI = glob.emitterNEI + 1
+	global.emitters["I" .. global.emitterNEI] = newEmitter
+	global.emitterNEI = global.emitterNEI + 1
 	
 	setActive(newEmitter, true, true)
 end
@@ -728,15 +731,15 @@ function scanAndBuildFields(emitterTable)
 				direction = defines.direction.north
 			end
 			
-			if glob.fields == nil then
-				glob.fields = {}
+			if global.fields == nil then
+				global.fields = {}
 			end
 			
 			for n=1,incTimes do
 				-- If another emitter (or even this one previously) has built a field at this location, skip trying to build there
-				if glob.fields[pos.x] == nil or glob.fields[pos.x][pos.y] == nil then
-					if game.canplaceentity({name = emitterTable["9"], position = pos, direction = direction}) then
-						local newField = game.createentity({name = emitterTable["9"], position = pos, force = game.forces.player, direction = direction})
+				if global.fields[pos.x] == nil or global.fields[pos.x][pos.y] == nil then
+					if game.can_place_entity({name = emitterTable["9"], position = pos, direction = direction}) then
+						local newField = game.create_entity({name = emitterTable["9"], position = pos, force = game.forces.player, direction = direction})
 						
 						newField.health = forcefieldTypes[emitterTable["9"]]["chargeRate"]
 						if emitterTable["11"] == nil then
@@ -744,10 +747,10 @@ function scanAndBuildFields(emitterTable)
 						end
 						table.insert(emitterTable["11"], newField)
 						
-						if glob.fields[pos.x] == nil then
-							glob.fields[pos.x] = {}
+						if global.fields[pos.x] == nil then
+							global.fields[pos.x] = {}
 						end
-						glob.fields[pos.x][pos.y] = emitterTable["5"]
+						global.fields[pos.x][pos.y] = emitterTable["5"]
 						
 						builtField = true
 						emitterTable["1"].energy = emitterTable["1"].energy -  (tickRate * forcefieldTypes[emitterTable["9"]]["energyPerRespawn"])
@@ -760,10 +763,10 @@ function scanAndBuildFields(emitterTable)
 					else
 						local blockingField = findForcefieldsRadius(pos, 0.4, true)
 						if blockingField ~= nil then
-							if glob.degradingFields ~= nil then
+							if global.degradingFields ~= nil then
 								-- Prevents the emitter from going into extended sleep from "can't build" due to degrading fields (happens most when switching field types)
 								local fpos = blockingField[1].position
-								for _,field in pairs(glob.degradingFields) do
+								for _,field in pairs(global.degradingFields) do
 									if field[1].position.x == pos.x and field[1].position.y == pos.y then
 										builtField = true
 										break
@@ -778,7 +781,7 @@ function scanAndBuildFields(emitterTable)
 								end
 								builtField = true
 							else
-								game.createentity({name = "forcefield-build-damage", position = pos, force = playerForce})
+								game.create_entity({name = "forcefield-build-damage", position = pos, force = playerForce})
 							end
 						end
 					end
@@ -789,8 +792,8 @@ function scanAndBuildFields(emitterTable)
 				pos.y = pos.y + yInc
 			end
 			
-			if tableIsEmpty(glob.fields) then
-				glob.fields = nil
+			if tableIsEmpty(global.fields) then
+				global.fields = nil
 			end
 			
 			if blockingFields == incTimes then
@@ -875,8 +878,8 @@ function generateFields(emitterTable)
 end
 
 function findForcefieldsRadius(position, radius, includeFullHealth)
-	local walls = game.findentitiesfiltered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "wall"})
-	local gates = game.findentitiesfiltered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "gate"})
+	local walls = game.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "wall"})
+	local gates = game.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "gate"})
 	local foundFields = {}
 	
 	if #walls ~= 0 then
@@ -899,8 +902,8 @@ function findForcefieldsRadius(position, radius, includeFullHealth)
 end
 
 function findForcefieldsArea(area, includeFullHealth)
-	local walls = game.findentitiesfiltered({area = area, type = "wall"})
-	local gates = game.findentitiesfiltered({area = area, type = "gate"})
+	local walls = game.find_entities_filtered({area = area, type = "wall"})
+	local gates = game.find_entities_filtered({area = area, type = "gate"})
 	local foundFields = {}
 	
 	if #walls ~= 0 then
@@ -923,11 +926,11 @@ function findForcefieldsArea(area, includeFullHealth)
 end
 
 function findGhostForcefields(position, radius)
-	local ghosts = game.findentitiesfiltered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "ghost"})
+	local ghosts = game.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "ghost"})
 	if #ghosts ~= 0 then
 		local foundGhosts = {}
 		for i,ghost in pairs(ghosts) do
-			if forcefieldTypes[ghost.ghostname] ~= nil then
+			if forcefieldTypes[ghost.ghost_name] ~= nil then
 				table.insert(foundGhosts, ghost)
 			end
 		end
@@ -938,13 +941,13 @@ end
 function onForcefieldDamaged(pos)
 	pos.x = math.floor(pos.x)
 	pos.y = math.floor(pos.y)
-	if glob.searchDamagedPos == nil then
-		glob.searchDamagedPos = {}
+	if global.searchDamagedPos == nil then
+		global.searchDamagedPos = {}
 	end
-	if glob.searchDamagedPos[pos.x] == nil then
-		glob.searchDamagedPos[pos.x] = {}
+	if global.searchDamagedPos[pos.x] == nil then
+		global.searchDamagedPos[pos.x] = {}
 	end
-	glob.searchDamagedPos[pos.x][pos.y] = 1
+	global.searchDamagedPos[pos.x][pos.y] = 1
 	activateTicker()
 end
 
@@ -954,19 +957,19 @@ function handleDamagedFields(forceFields)
 	local addedFields
 	local fieldID
 	
-	if glob.fields ~= nil and glob.emitters ~= nil then
+	if global.fields ~= nil and global.emitters ~= nil then
 		-- For each possibly damaged forcefield found
 		for k,field in pairs(forceFields) do
 			pos = field.position
 			fieldShouldBeAdded = true
 			
 			-- If the field is known to the mod
-			if glob.fields[pos.x] ~= nil and glob.fields[pos.x][pos.y] ~= nil then
-				fieldID = glob.fields[pos.x][pos.y]
+			if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] ~= nil then
+				fieldID = global.fields[pos.x][pos.y]
 				-- If the field has a valid linked emitter
-				if glob.emitters[fieldID] ~= nil then
-					if glob.emitters[fieldID]["11"] ~= nil then
-						for _,generatingField in pairs(glob.emitters[fieldID]["11"]) do
+				if global.emitters[fieldID] ~= nil then
+					if global.emitters[fieldID]["11"] ~= nil then
+						for _,generatingField in pairs(global.emitters[fieldID]["11"]) do
 							if generatingField.equals(field) then
 								fieldShouldBeAdded = false
 								break
@@ -976,11 +979,11 @@ function handleDamagedFields(forceFields)
 					
 					-- Add the damaged field to the emitter damaged field table if it isn't already in it
 					if fieldShouldBeAdded then
-						if glob.emitters[fieldID]["3"] == nil then
-							glob.emitters[fieldID]["3"] = {}
+						if global.emitters[fieldID]["3"] == nil then
+							global.emitters[fieldID]["3"] = {}
 						end
-						table.insert(glob.emitters[fieldID]["3"], field)
-						setActive(glob.emitters[fieldID])
+						table.insert(global.emitters[fieldID]["3"], field)
+						setActive(global.emitters[fieldID])
 						addedFields = true
 					end
 				end
@@ -991,14 +994,14 @@ end
 
 function onForcefieldDied(field)
 	local pos = field.position
-	if glob.fields ~= nil and glob.fields[pos.x] ~= nil and glob.fields[pos.x][pos.y] ~= nil then
-		local emitterID = glob.fields[pos.x][pos.y]
+	if global.fields ~= nil and global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] ~= nil then
+		local emitterID = global.fields[pos.x][pos.y]
 		removeForceFieldID(pos.x, pos.y)
-		if glob.emitters ~= nil and glob.emitters[emitterID] ~= nil then
-			setActive(glob.emitters[emitterID], true)
+		if global.emitters ~= nil and global.emitters[emitterID] ~= nil then
+			setActive(global.emitters[emitterID], true)
 		end
 		if forcefieldTypes[field.name]["deathEntity"] ~= nil then
-			game.createentity({name = forcefieldTypes[field.name]["deathEntity"], position = pos, force = game.forces.player})
+			game.create_entity({name = forcefieldTypes[field.name]["deathEntity"], position = pos, force = game.forces.player})
 		end
 	end
 end
@@ -1017,18 +1020,18 @@ function setActive(emitterTable, enableCheckBuildingFields, skipResetTimer)
 	
 	if not emitterTable["2"] then
 		emitterTable["2"] = true
-		if glob.activeEmitters == nil then
-			glob.activeEmitters = {}
+		if global.activeEmitters == nil then
+			global.activeEmitters = {}
 		end
-		table.insert(glob.activeEmitters, emitterTable)
+		table.insert(global.activeEmitters, emitterTable)
 		activateTicker()
 	end
 end
 
 function activateTicker()
-	if not glob.ticking then
-		glob.ticking = tickRate
-		game.onevent(defines.events.ontick, ticker)
+	if not global.ticking then
+		global.ticking = tickRate
+		game.on_event(defines.events.on_tick, ticker)
 	end
 end
 
@@ -1041,12 +1044,12 @@ function getEmitterBonusDistance(emitterTable)
 end
 
 function handleGUIDirectionButtons(event)
-	local frame = game.players[event.element.playerindex].gui.center.emitterConfig
+	local frame = game.players[event.element.player_index].gui.center.emitterConfig
 	local nameToDirection = {["directionN"] = defines.direction.north, ["directionS"] = defines.direction.south, ["directionE"] = defines.direction.east, ["directionW"] = defines.direction.west}
 	
 	if frame ~= nil then
 		local directions = frame.emitterConfigTable.directions
-		glob.emitterConfigGUIs["I" .. event.element.playerindex][2] = nameToDirection[event.element.name]
+		global.emitterConfigGUIs["I" .. event.element.player_index][2] = nameToDirection[event.element.name]
 		
 		--broken in 0.11.3
 		--directions.directionN.style = "selectbuttons"
@@ -1083,7 +1086,7 @@ function handleGUIDirectionButtons(event)
 end
 
 function handleGUIFieldTypeButtons(event)
-	local frame = game.players[event.element.playerindex].gui.center.emitterConfig
+	local frame = game.players[event.element.player_index].gui.center.emitterConfig
 	local nameToFieldName = {["fieldB"] = "blue" .. fieldSuffix, ["fieldG"] = "green" .. fieldSuffix, ["fieldR"] = "red" .. fieldSuffix, ["fieldP"] = "purple" .. fieldSuffix}
 	if frame ~= nil then
 		local fields = frame.emitterConfigTable.fields
@@ -1116,7 +1119,7 @@ function handleGUIFieldTypeButtons(event)
 		end
 		
 		if shouldSwitch then
-			glob.emitterConfigGUIs["I" .. event.element.playerindex][3] = nameToFieldName[event.element.name]
+			global.emitterConfigGUIs["I" .. event.element.player_index][3] = nameToFieldName[event.element.name]
 			fields.fieldB.destroy()
 			fields.fieldG.destroy()
 			fields.fieldR.destroy()
@@ -1126,13 +1129,13 @@ function handleGUIFieldTypeButtons(event)
 			fields.add({type = "button", name = "fieldR", caption = "R", style = f3Style})
 			fields.add({type = "button", name = "fieldP", caption = "P", style = f4Style})
 		else
-			game.players[event.element.playerindex].print("You need to complete research before this field type can be used.")
+			game.players[event.element.player_index].print("You need to complete research before this field type can be used.")
 		end
 	end
 end
 
 function handleGUIUpgradeButtons(event)
-	local player = game.players[event.element.playerindex]
+	local player = game.players[event.element.player_index]
 	local frame = player.gui.center.emitterConfig
 	local nameToStyle = {["distanceUpgrades"] = "advanced-circuit", ["widthUpgrades"] = "processing-unit"}
 	local styleToName = {["advanced-circuit"] = "distanceUpgrades", ["processing-unit"] = "widthUpgrades"}
@@ -1143,8 +1146,8 @@ function handleGUIUpgradeButtons(event)
 		local upgradeButton
 		local count
 		
-		if player.cursorstack ~= nil then
-			local stack = player.cursorstack
+		if player.cursor_stack ~= nil then
+			local stack = player.cursor_stack
 			
 			if styleToName[stack.name] ~= nil then
 				upgradeButton = upgrades[styleToName[stack.name]]
@@ -1187,12 +1190,12 @@ function handleGUIUpgradeButtons(event)
 					
 					stack.count = stack.count - 1
 					if stack.count == 0 then
-						player.cursorstack = nil
+						player.cursor_stack = nil
 					else
-						player.cursorstack = stack
+						player.cursor_stack = stack
 					end
 				else
-					game.players[event.element.playerindex].print("Maximum upgrades of this type already installed.")
+					game.players[event.element.player_index].print("Maximum upgrades of this type already installed.")
 				end
 			end
 		else
@@ -1246,12 +1249,12 @@ function handleGUIUpgradeButtons(event)
 end
 
 function removeAllUpgrades(event)
-	local frame = game.players[event.element.playerindex].gui.center.emitterConfig
+	local frame = game.players[event.element.player_index].gui.center.emitterConfig
 
 	if frame then -- This shouldn't ever be required but won't hurt to check
-		if glob.emitterConfigGUIs ~= nil
-			and glob.emitterConfigGUIs["I" .. event.element.playerindex] ~= nil
-			and glob.emitterConfigGUIs["I" .. event.element.playerindex][1]["1"].valid then
+		if global.emitterConfigGUIs ~= nil
+			and global.emitterConfigGUIs["I" .. event.element.player_index] ~= nil
+			and global.emitterConfigGUIs["I" .. event.element.player_index][1]["1"].valid then
 			
 			local upgrades = frame.emitterConfigTable.upgrades
 			local count
@@ -1268,14 +1271,14 @@ function removeAllUpgrades(event)
 					button = upgrades.add({type = "button", name = buttonName, caption = "", style = "noitem"})
 					
 					updateMaxLabel(frame, button)
-					transferToPlayer(game.players[event.element.playerindex], {name = itemName, count = count})
+					transferToPlayer(game.players[event.element.player_index], {name = itemName, count = count})
 				end
 			end
 		else
-			if glob.emitterConfigGUIs ~= nil and glob.emitterConfigGUIs["I" .. event.element.playerindex] ~= nil then
-				glob.emitterConfigGUIs["I" .. event.element.playerindex] = nil
-				if tableIsEmpty(glob.emitterConfigGUIs) then
-					glob.emitterConfigGUIs = nil
+			if global.emitterConfigGUIs ~= nil and global.emitterConfigGUIs["I" .. event.element.player_index] ~= nil then
+				global.emitterConfigGUIs["I" .. event.element.player_index] = nil
+				if tableIsEmpty(global.emitterConfigGUIs) then
+					global.emitterConfigGUIs = nil
 				end
 			end
 			frame.destroy()
@@ -1284,18 +1287,18 @@ function removeAllUpgrades(event)
 end
 
 function handleGUIMenuButtons(event)
-	local frame = game.players[event.element.playerindex].gui.center.emitterConfig
+	local frame = game.players[event.element.player_index].gui.center.emitterConfig
 	if frame ~= nil then
 		if event.element.name == "applyButton" then
 			if verifyAndSetFromGUI(event) then
-				glob.emitterConfigGUIs["I" .. event.element.playerindex] = nil
-				if tableIsEmpty(glob.emitterConfigGUIs) then
-					glob.emitterConfigGUIs = nil
+				global.emitterConfigGUIs["I" .. event.element.player_index] = nil
+				if tableIsEmpty(global.emitterConfigGUIs) then
+					global.emitterConfigGUIs = nil
 				end
 				frame.destroy()
 			end
 		elseif event.element.name == "emitterHelpButton" then
-			printGUIHelp(game.players[event.element.playerindex])
+			printGUIHelp(game.players[event.element.player_index])
 		elseif event.element.name == "removeAllButton" then
 			removeAllUpgrades(event)
 		end
@@ -1351,7 +1354,7 @@ local guiNames =
 	["applyButton"] = handleGUIMenuButtons
 }
 
-game.onevent(defines.events.onguiclick, function(event)
+game.on_event(defines.events.on_gui_click, function(event)
 	if guiNames[event.element.name] then
 		guiNames[event.element.name](event)
 	end
@@ -1367,27 +1370,27 @@ function verifyAndSetFromGUI(event)
 	local newWidthUpgrades
 	local newDistanceUpgrades
 	local selectedButtonStyle = "selectbuttonsselected"
-	local player = game.players[event.element.playerindex]
+	local player = game.players[event.element.player_index]
 	local settingsAreGood = true
 	local settingsChanged = false
 	local frame = player.gui.center.emitterConfig
 	local emitterConfigTable = frame.emitterConfigTable 
 	local upgrades = emitterConfigTable.upgrades
 	
-	if glob.emitterConfigGUIs ~= nil
-		and glob.emitterConfigGUIs["I" .. event.element.playerindex] ~= nil
-		and glob.emitterConfigGUIs["I" .. event.element.playerindex][1]["1"].valid then
+	if global.emitterConfigGUIs ~= nil
+		and global.emitterConfigGUIs["I" .. event.element.player_index] ~= nil
+		and global.emitterConfigGUIs["I" .. event.element.player_index][1]["1"].valid then
 		
-		local emitterTable = glob.emitterConfigGUIs["I" .. event.element.playerindex][1]
+		local emitterTable = global.emitterConfigGUIs["I" .. event.element.player_index][1]
 		
-		if glob.emitterConfigGUIs["I" .. event.element.playerindex][2] ~= nil then
-			newDirection = glob.emitterConfigGUIs["I" .. event.element.playerindex][2]
+		if global.emitterConfigGUIs["I" .. event.element.player_index][2] ~= nil then
+			newDirection = global.emitterConfigGUIs["I" .. event.element.player_index][2]
 		else
 			newDirection = emitterTable["10"]
 		end
 		
-		if glob.emitterConfigGUIs["I" .. event.element.playerindex][3] ~= nil then
-			newFieldType = glob.emitterConfigGUIs["I" .. event.element.playerindex][3]
+		if global.emitterConfigGUIs["I" .. event.element.player_index][3] ~= nil then
+			newFieldType = global.emitterConfigGUIs["I" .. event.element.player_index][3]
 		else
 			newFieldType = emitterTable["9"]
 		end
@@ -1467,10 +1470,10 @@ end
 function showEmitterGui(emitterTable, playerIndex)
 	local GUICenter = game.players[playerIndex].gui.center
 	local canOpenGUI = true
-	if glob.emitterConfigGUIs ~= nil then
+	if global.emitterConfigGUIs ~= nil then
 		for index,player in pairs(game.players) do
 			--if index ~= playerIndex then
-				if glob.emitterConfigGUIs["I" .. index] ~= nil and glob.emitterConfigGUIs["I" .. index][1] == emitterTable then
+				if global.emitterConfigGUIs["I" .. index] ~= nil and global.emitterConfigGUIs["I" .. index][1] == emitterTable then
 					if index ~= playerIndex then
 						game.players[playerIndex].print(player.name .. " (player " .. index .. ") has the GUI for this emitter open right now.")
 					end
@@ -1481,7 +1484,7 @@ function showEmitterGui(emitterTable, playerIndex)
 	end
 	
 	if canOpenGUI and GUICenter and GUICenter.emitterConfig == nil then
-		local frame = GUICenter.add({type = "frame", name = "emitterConfig", caption = game.getlocalisedentityname(emitterName), direction = "vertical", style = frame_caption_label_style})
+		local frame = GUICenter.add({type = "frame", name = "emitterConfig", caption = game.get_localised_entity_name(emitterName), direction = "vertical", style = frame_caption_label_style})
 		local configTable = frame.add({type ="table", name = "emitterConfigTable", colspan = 2})
 		configTable.add({type = "label", name = "directionLabel", caption = "Direction:                       "})
 		local directions = configTable.add({type = "table", name = "directions", colspan = 4})
@@ -1585,11 +1588,11 @@ function showEmitterGui(emitterTable, playerIndex)
 		frame.add({type = "button", name = "removeAllButton", caption = "Remove all upgrades"})
 		frame.add({type = "button", name = "applyButton", caption = "Apply"})
 		
-		if glob.emitterConfigGUIs == nil then
-			glob.emitterConfigGUIs = {}
+		if global.emitterConfigGUIs == nil then
+			global.emitterConfigGUIs = {}
 		end
 		
-		glob.emitterConfigGUIs["I" .. playerIndex] = {}
-		glob.emitterConfigGUIs["I" .. playerIndex][1] = emitterTable
+		global.emitterConfigGUIs["I" .. playerIndex] = {}
+		global.emitterConfigGUIs["I" .. playerIndex][1] = emitterTable
 	end
 end
