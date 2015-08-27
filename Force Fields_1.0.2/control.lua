@@ -241,7 +241,7 @@ game.on_event(defines.events.on_marked_for_deconstruction, function(event)
 	if event.entity.name == emitterName then
 		local emitterTable = findEmitter(event.entity)
 		if emitterTable ~= nil then
-			emitterTable["14"] = true
+			emitterTable["disabled"] = true
 			degradeLinkedFields(emitterTable)
 		end
 	end
@@ -251,7 +251,7 @@ game.on_event(defines.events.on_canceled_deconstruction, function(event)
 	if event.entity.name == emitterName then
 		local emitterTable = findEmitter(event.entity)
 		if emitterTable ~= nil then
-			emitterTable["14"] = false
+			emitterTable["disabled"] = false
 			setActive(emitterTable, true)
 		end
 	end
@@ -282,31 +282,10 @@ function dropOnGround(surface, position, dropStack, markForDeconstruction, force
 	end
 end
 
-function storeKilledEmitter(emitterTable)
-	local newKilledEmitter = {}
-	if global.killedEmitters == nil then
-		global.killedEmitters = {}
-	end
-  newKilledEmitter["0"] = emitterTable["1"].surface
-	newKilledEmitter["1"] = emitterTable["1"].position
-	newKilledEmitter["2"] = emitterTable["6"]
-	newKilledEmitter["3"] = emitterTable["7"]
-	newKilledEmitter["4"] = emitterTable["9"]
-	newKilledEmitter["5"] = emitterTable["10"]
-	table.insert(global.killedEmitters, newKilledEmitter)
-end
-
-function removeKilledEmitter(index)
-	table.remove(global.killedEmitters, index)
-	if #global.killedEmitters == 0 then
-		global.killedEmitters = nil
-	end
-end
-
 function onEmitterDied(emitter)
 	local emitterTable = findEmitter(emitter)
 	if emitterTable ~= nil then
-		removeEmitterID(emitterTable["5"])
+		removeEmitterID(emitterTable["emitter-NEI"])
 		storeKilledEmitter(emitterTable)
 	end
 end
@@ -316,24 +295,24 @@ function onEmitterMined(emitter, playerIndex)
 	local player
 	
 	if emitterTable ~= nil then
-		removeEmitterID(emitterTable["5"])
+		removeEmitterID(emitterTable["emitter-NEI"])
 	end
 	if playerIndex then
 		player = game.players[playerIndex]
 	end
 	
-	if emitterTable["12"] ~= 0 then
+	if emitterTable["width-upgrades"] ~= 0 then
 		if player then
-			transferToPlayer(player, {name = "advanced-circuit", count = emitterTable["12"]})
+			transferToPlayer(player, {name = "advanced-circuit", count = emitterTable["width-upgrades"]})
 		else
-			dropOnGround(emitterTable["1"].surface, emitterTable["1"].position, {name = "advanced-circuit", count = emitterTable["12"]}, true, emitterTable["1"].force)
+			dropOnGround(emitterTable["entity"].surface, emitterTable["entity"].position, {name = "advanced-circuit", count = emitterTable["width-upgrades"]}, true, emitterTable["entity"].force)
 		end
 	end
-	if emitterTable["13"] ~= 0 then
+	if emitterTable["distance-upgrades"] ~= 0 then
 		if player then
-			transferToPlayer(player, {name = "processing-unit", count = emitterTable["13"]})
+			transferToPlayer(player, {name = "processing-unit", count = emitterTable["distance-upgrades"]})
 		else
-			dropOnGround(emitterTable["1"].surface, emitterTable["1"].position, {name = "processing-unit", count = emitterTable["13"]}, true, emitterTable["1"].force)
+			dropOnGround(emitterTable["entity"].surface, emitterTable["entity"].position, {name = "processing-unit", count = emitterTable["distance-upgrades"]}, true, emitterTable["entity"].force)
 		end
 	end
 end
@@ -384,7 +363,7 @@ end
 function findEmitter(emitter)
 	if global.emitters ~= nil then
 		for k,v in pairs(global.emitters) do
-			if v["1"].equals(emitter) then
+			if v["entity"].equals(emitter) then
 				return v
 			end
 		end
@@ -394,7 +373,7 @@ end
 function removeEmitter(emitter)
 	local emitterTable = findEmitter(emitter)
 	if emitterTable ~= nil then
-		removeEmitterID(emitterTable["5"])
+		removeEmitterID(emitterTable["emitter-NEI"])
 	end
 end
 
@@ -485,7 +464,7 @@ function degradeLinkedFields(emitterTable)
 			
 			for k,field in pairs(fields) do
 				pos = field.position
-				if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] == emitterTable["5"] then
+				if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] == emitterTable["emitter-NEI"] then
 					table.insert(global.degradingFields, {[1] = field, [2] = field.position})
 					removeForcefield(field)
 					
@@ -549,24 +528,24 @@ function tick()
 		
 		-- For each active emitter check if they have fields to repair or fields to build
 		for k,emitterTable in pairs(global.activeEmitters) do
-			if emitterTable["1"].valid then
+			if emitterTable["entity"].valid then
 				shouldRemainActive = false
-				if emitterTable["14"] == false then
-					if emitterTable["4"] ~= nil then
+				if emitterTable["disabled"] == false then
+					if emitterTable["build-scan"] ~= nil then
 						-- The function will toggle index 4 if it finishes building fields.
 						if scanAndBuildFields(emitterTable) then
 							shouldRemainActive = true
 						end
 					end
 				end
-				if emitterTable["11"] then
+				if emitterTable["generating-fields"] then
 					-- The function will toggle index 11 if it finishes generating fields.
 					if generateFields(emitterTable) then
 						shouldRemainActive = true
 					end
 				end
 				
-				if emitterTable["3"] then
+				if emitterTable["damaged-fields"] then
 					-- The function will toggle index 3 if it finishes repairing fields.
 					if regenerateFields(emitterTable) then
 						shouldRemainActive = true
@@ -575,13 +554,13 @@ function tick()
 				
 				if not shouldRemainActive then
 					-- Index 2 is the active state of the emitter
-					emitterTable["2"] = false
+					emitterTable["active"] = false
 					if not removeActiveEmitterID(k) then
 						break
 					end
 				end
 			else
-				removeEmitterID(emitterTable["5"])
+				removeEmitterID(emitterTable["emitter-NEI"])
 				if not removeActiveEmitterID(k) then
 					break
 				end
@@ -642,43 +621,63 @@ function useTool(pos, playerIndex)
 	end
 end
 
+function storeKilledEmitter(emitterTable)
+	local newKilledEmitter = {}
+	if global.killedEmitters == nil then
+		global.killedEmitters = {}
+	end
+  newKilledEmitter["surface"] = emitterTable["entity"].surface
+	newKilledEmitter["position"] = emitterTable["entity"].position
+	newKilledEmitter["width"] = emitterTable["width"]
+	newKilledEmitter["distance"] = emitterTable["distance"]
+	newKilledEmitter["type"] = emitterTable["type"]
+	newKilledEmitter["direction"] = emitterTable["direction"]
+	table.insert(global.killedEmitters, newKilledEmitter)
+end
+
+function removeKilledEmitter(index)
+	table.remove(global.killedEmitters, index)
+	if #global.killedEmitters == 0 then
+		global.killedEmitters = nil
+	end
+end
+
 function onEmitterBuilt(entity)
 	local newEmitter = {}
+  local surface = entity.surface
 	if global.emitters == nil then
 		global.emitters = {}
 		global.emitterNEI = 1
 	end
 	
-	newEmitter["1"] = entity							-- emitter entity
-	newEmitter["2"] = false								-- is active
-	newEmitter["3"] = nil								-- damaged fields table (fields needing to be charged back to full health from damage)
-	newEmitter["4"] = true								-- check for building fields
-	newEmitter["5"] = "I" .. global.emitterNEI			-- emitterID (the index the table is using in the global.emitters table)
-														-- used by fields to reference the emitter they're being powered from
-	newEmitter["6"] = emitterDefaultWidth				-- width the emitter is projecting at
-	newEmitter["7"] = emitterDefaultDistance			-- distance the emitter is projecting at
-	newEmitter["8"] = 0									-- field ticks until next build check
-	newEmitter["9"] = defaultFieldType					-- field type
-	newEmitter["10"] = defines.direction.north			-- emitter direction
-	newEmitter["11"] = nil								-- initially generated fields needing to be generated to full health
-	newEmitter["12"] = 0								-- width upgrades applied
-	newEmitter["13"] = 0								-- distance upgrades applied
-	newEmitter["14"] = false							-- is disabled
+	newEmitter["entity"] = entity
+	newEmitter["active"] = false
+	newEmitter["damaged-fields"] = nil
+	newEmitter["build-scan"] = true
+	newEmitter["emitter-NEI"] = "I" .. global.emitterNEI
+	newEmitter["width"] = emitterDefaultWidth
+	newEmitter["distance"] = emitterDefaultDistance
+	newEmitter["build-tick"] = 0
+	newEmitter["type"] = defaultFieldType
+	newEmitter["direction"] = defines.direction.north
+	newEmitter["generating-fields"] = nil
+	newEmitter["width-upgrades"] = 0
+	newEmitter["distance-upgrades"] = 0
+	newEmitter["disabled"] = false
 	
 	-- Simulates reviving killed emitters
 	if global.killedEmitters ~= nil then
 		for k,killedEmitter in pairs(global.killedEmitters) do
-			if killedEmitter["1"].x == entity.position.x and killedEmitter["1"].y == entity.position.y then
-				newEmitter["6"] = killedEmitter["2"]
-				newEmitter["7"] = killedEmitter["3"]
-				newEmitter["9"] = killedEmitter["4"]
-				newEmitter["10"] = killedEmitter["5"]
+			if killedEmitter["surface"] == surface and killedEmitter["position"].x == entity.position.x and killedEmitter["position"].y == entity.position.y then
+				newEmitter["width"] = killedEmitter["width"]
+				newEmitter["distance"] = killedEmitter["distance"]
+				newEmitter["type"] = killedEmitter["type"]
+				newEmitter["direction"] = killedEmitter["direction"]
 				removeKilledEmitter(k)
 				break
 			end
 		end
 	end
-	
 	
 	global.emitters["I" .. global.emitterNEI] = newEmitter
 	global.emitterNEI = global.emitterNEI + 1
@@ -687,45 +686,45 @@ function onEmitterBuilt(entity)
 end
 
 function getFieldsArea(emitterTable)
-	local scanDirection = emitterTable["10"]
+	local scanDirection = emitterTable["direction"]
 	local pos = {}
 	local xInc = 0
 	local yInc = 0
 	
 	if scanDirection == defines.direction.north then
-		pos.x = emitterTable["1"].position.x - (emitterTable["6"] - 1) / 2
-		pos.y = emitterTable["1"].position.y - emitterTable["7"]
+		pos.x = emitterTable["entity"].position.x - (emitterTable["width"] - 1) / 2
+		pos.y = emitterTable["entity"].position.y - emitterTable["distance"]
 		xInc = 1
 	elseif scanDirection == defines.direction.east then
-		pos.x = emitterTable["1"].position.x + emitterTable["7"]
-		pos.y = emitterTable["1"].position.y - (emitterTable["6"] - 1) / 2
+		pos.x = emitterTable["entity"].position.x + emitterTable["distance"]
+		pos.y = emitterTable["entity"].position.y - (emitterTable["width"] - 1) / 2
 		yInc = 1
 	elseif scanDirection == defines.direction.south then
-		pos.x = emitterTable["1"].position.x + (emitterTable["6"] - 1) / 2
-		pos.y = emitterTable["1"].position.y + emitterTable["7"]
+		pos.x = emitterTable["entity"].position.x + (emitterTable["width"] - 1) / 2
+		pos.y = emitterTable["entity"].position.y + emitterTable["distance"]
 		xInc = -1
 	else
-		pos.x = emitterTable["1"].position.x - emitterTable["7"]
-		pos.y = emitterTable["1"].position.y + (emitterTable["6"] - 1) / 2
+		pos.x = emitterTable["entity"].position.x - emitterTable["distance"]
+		pos.y = emitterTable["entity"].position.y + (emitterTable["width"] - 1) / 2
 		yInc = -1
 	end
 	
-	return pos, xInc, yInc, emitterTable["6"]
+	return pos, xInc, yInc, emitterTable["width"]
 end
 
 function scanAndBuildFields(emitterTable)
 	local builtField
 	
-	if emitterTable["8"] == 0 then
-		local energyBefore = emitterTable["1"].energy
-		if emitterTable["1"].energy >= (tickRate * forcefieldTypes[emitterTable["9"]]["energyPerRespawn"] + tickRate * forcefieldTypes[emitterTable["9"]]["energyPerCharge"]) then
+	if emitterTable["build-tick"] == 0 then
+		local energyBefore = emitterTable["entity"].energy
+		if emitterTable["entity"].energy >= (tickRate * forcefieldTypes[emitterTable["type"]]["energyPerRespawn"] + tickRate * forcefieldTypes[emitterTable["type"]]["energyPerCharge"]) then
 			local pos, xInc, yInc, incTimes = getFieldsArea(emitterTable)
 			local blockingFields = 0
 			local blockingFieldsBefore = 0
 			local direction
 			local playerForce = game.forces.player
 			
-			if emitterTable["10"] == defines.direction.north or emitterTable["10"] == defines.direction.south then
+			if emitterTable["direction"] == defines.direction.north or emitterTable["direction"] == defines.direction.south then
 				direction = defines.direction.east
 			else
 				direction = defines.direction.north
@@ -738,24 +737,24 @@ function scanAndBuildFields(emitterTable)
 			for n=1,incTimes do
 				-- If another emitter (or even this one previously) has built a field at this location, skip trying to build there
 				if global.fields[pos.x] == nil or global.fields[pos.x][pos.y] == nil then
-					if game.can_place_entity({name = emitterTable["9"], position = pos, direction = direction}) then
-						local newField = game.create_entity({name = emitterTable["9"], position = pos, force = game.forces.player, direction = direction})
+					if game.can_place_entity({name = emitterTable["type"], position = pos, direction = direction}) then
+						local newField = game.create_entity({name = emitterTable["type"], position = pos, force = game.forces.player, direction = direction})
 						
-						newField.health = forcefieldTypes[emitterTable["9"]]["chargeRate"]
-						if emitterTable["11"] == nil then
-							emitterTable["11"] = {}
+						newField.health = forcefieldTypes[emitterTable["type"]]["chargeRate"]
+						if emitterTable["generating-fields"] == nil then
+							emitterTable["generating-fields"] = {}
 						end
-						table.insert(emitterTable["11"], newField)
+						table.insert(emitterTable["generating-fields"], newField)
 						
 						if global.fields[pos.x] == nil then
 							global.fields[pos.x] = {}
 						end
-						global.fields[pos.x][pos.y] = emitterTable["5"]
+						global.fields[pos.x][pos.y] = emitterTable["emitter-NEI"]
 						
 						builtField = true
-						emitterTable["1"].energy = emitterTable["1"].energy -  (tickRate * forcefieldTypes[emitterTable["9"]]["energyPerRespawn"])
-						if n ~= incTimes and emitterTable["1"].energy == 0 then
-							emitterTable["8"] = forcefieldTypes[emitterTable["9"]]["respawnRate"] * 10
+						emitterTable["entity"].energy = emitterTable["entity"].energy -  (tickRate * forcefieldTypes[emitterTable["type"]]["energyPerRespawn"])
+						if n ~= incTimes and emitterTable["entity"].energy == 0 then
+							emitterTable["build-tick"] = forcefieldTypes[emitterTable["type"]]["respawnRate"] * 10
 							degradeLinkedFields(emitterTable)
 							break
 						end
@@ -797,81 +796,81 @@ function scanAndBuildFields(emitterTable)
 			end
 			
 			if blockingFields == incTimes then
-				emitterTable["4"] = nil
+				emitterTable["build-scan"] = nil
 				return false
 			else
 				if not builtField then
-					emitterTable["8"] = forcefieldTypes[emitterTable["9"]]["respawnRate"] * 3 + math.random(forcefieldTypes[emitterTable["9"]]["respawnRate"])
+					emitterTable["build-tick"] = forcefieldTypes[emitterTable["type"]]["respawnRate"] * 3 + math.random(forcefieldTypes[emitterTable["type"]]["respawnRate"])
 				else
-					emitterTable["8"] = forcefieldTypes[emitterTable["9"]]["respawnRate"]
+					emitterTable["build-tick"] = forcefieldTypes[emitterTable["type"]]["respawnRate"]
 				end
 			end
 		else
-			emitterTable["8"] = forcefieldTypes[emitterTable["9"]]["respawnRate"] * 5
+			emitterTable["build-tick"] = forcefieldTypes[emitterTable["type"]]["respawnRate"] * 5
 			degradeLinkedFields(emitterTable)
 		end
 	else
-		emitterTable["8"] = emitterTable["8"] - 1
+		emitterTable["build-tick"] = emitterTable["build-tick"] - 1
 	end
 	
 	return true
 end
 
 function regenerateFields(emitterTable)
-	local availableEnergy = emitterTable["1"].energy
+	local availableEnergy = emitterTable["entity"].energy
 	local neededEnergy
 	
-	for k,field in pairs(emitterTable["3"]) do
+	for k,field in pairs(emitterTable["damaged-fields"]) do
 		if field.valid then
 			neededEnergy = forcefieldTypes[field.name]["energyPerHealthLost"] * (forcefieldTypes[field.name]["maxHealth"] - field.health)
 			if availableEnergy >= neededEnergy then
 				field.health = forcefieldTypes[field.name]["maxHealth"]
 				availableEnergy = availableEnergy - neededEnergy
-				table.remove(emitterTable["3"], k)
+				table.remove(emitterTable["damaged-fields"], k)
 			else
 				degradeLinkedFields(emitterTable)
-				emitterTable["3"] = {}
-				emitterTable["8"] = forcefieldTypes[emitterTable["9"]]["respawnRate"] * 10
+				emitterTable["damaged-fields"] = {}
+				emitterTable["build-tick"] = forcefieldTypes[emitterTable["type"]]["respawnRate"] * 10
 				setActive(emitterTable, true, true)
 			end
 		else
-			table.remove(emitterTable["3"], k)
+			table.remove(emitterTable["damaged-fields"], k)
 		end
 	end
 	
-	emitterTable["1"].energy = availableEnergy
-	if #emitterTable["3"] == 0 then
-		emitterTable["3"] = nil
+	emitterTable["entity"].energy = availableEnergy
+	if #emitterTable["damaged-fields"] == 0 then
+		emitterTable["damaged-fields"] = nil
 	else
 		return true
 	end
 end
 
 function generateFields(emitterTable)
-	local availableEnergy = emitterTable["1"].energy
+	local availableEnergy = emitterTable["entity"].energy
 	
-	for k,field in pairs(emitterTable["11"]) do
+	for k,field in pairs(emitterTable["generating-fields"]) do
 		if field.valid then
 			if availableEnergy >= (forcefieldTypes[field.name]["energyPerCharge"] * tickRate) then
 				field.health = field.health + (forcefieldTypes[field.name]["chargeRate"] * tickRate)
 				availableEnergy = availableEnergy - (forcefieldTypes[field.name]["energyPerCharge"] * tickRate)
 				if field.health >= forcefieldTypes[field.name]["maxHealth"] then
-					table.remove(emitterTable["11"], k)
+					table.remove(emitterTable["generating-fields"], k)
 				end
 			else
 				degradeLinkedFields(emitterTable)
-				emitterTable["11"] = {}
-				emitterTable["8"] = forcefieldTypes[emitterTable["9"]]["respawnRate"] * 10
+				emitterTable["generating-fields"] = {}
+				emitterTable["build-tick"] = forcefieldTypes[emitterTable["type"]]["respawnRate"] * 10
 				setActive(emitterTable, true, true)
 			end
 		else
-			table.remove(emitterTable["11"], k)
+			table.remove(emitterTable["generating-fields"], k)
 		end
 	end
 	
-	emitterTable["1"].energy = availableEnergy
-	if #emitterTable["11"] == 0 then
-		emitterTable["11"] = nil
+	emitterTable["entity"].energy = availableEnergy
+	if #emitterTable["generating-fields"] == 0 then
+		emitterTable["generating-fields"] = nil
 	else
 		return true
 	end
@@ -968,8 +967,8 @@ function handleDamagedFields(forceFields)
 				fieldID = global.fields[pos.x][pos.y]
 				-- If the field has a valid linked emitter
 				if global.emitters[fieldID] ~= nil then
-					if global.emitters[fieldID]["11"] ~= nil then
-						for _,generatingField in pairs(global.emitters[fieldID]["11"]) do
+					if global.emitters[fieldID]["generating-fields"] ~= nil then
+						for _,generatingField in pairs(global.emitters[fieldID]["generating-fields"]) do
 							if generatingField.equals(field) then
 								fieldShouldBeAdded = false
 								break
@@ -979,10 +978,10 @@ function handleDamagedFields(forceFields)
 					
 					-- Add the damaged field to the emitter damaged field table if it isn't already in it
 					if fieldShouldBeAdded then
-						if global.emitters[fieldID]["3"] == nil then
-							global.emitters[fieldID]["3"] = {}
+						if global.emitters[fieldID]["damaged-fields"] == nil then
+							global.emitters[fieldID]["damaged-fields"] = {}
 						end
-						table.insert(global.emitters[fieldID]["3"], field)
+						table.insert(global.emitters[fieldID]["damaged-fields"], field)
 						setActive(global.emitters[fieldID])
 						addedFields = true
 					end
@@ -1007,19 +1006,19 @@ function onForcefieldDied(field)
 end
 
 function setActive(emitterTable, enableCheckBuildingFields, skipResetTimer)
-	if emitterTable["14"] == true then
+	if emitterTable["disabled"] == true then
 		return
 	end
 	
 	if enableCheckBuildingFields then
-		emitterTable["4"] = true
-		if not skipResetTimer and emitterTable["8"] > forcefieldTypes[emitterTable["9"]]["respawnRate"] or not emitterTable["2"] then
-			emitterTable["8"] = forcefieldTypes[emitterTable["9"]]["respawnRate"]
+		emitterTable["build-scan"] = true
+		if not skipResetTimer and emitterTable["build-tick"] > forcefieldTypes[emitterTable["type"]]["respawnRate"] or not emitterTable["active"] then
+			emitterTable["build-tick"] = forcefieldTypes[emitterTable["type"]]["respawnRate"]
 		end
 	end
 	
-	if not emitterTable["2"] then
-		emitterTable["2"] = true
+	if not emitterTable["active"] then
+		emitterTable["active"] = true
 		if global.activeEmitters == nil then
 			global.activeEmitters = {}
 		end
@@ -1036,11 +1035,11 @@ function activateTicker()
 end
 
 function getEmitterBonusWidth(emitterTable)
-	return emitterTable["13"] * widthUpgradeMultiplier
+	return emitterTable["distance-upgrades"] * widthUpgradeMultiplier
 end
 
 function getEmitterBonusDistance(emitterTable)
-	return emitterTable["12"]
+	return emitterTable["width-upgrades"]
 end
 
 function handleGUIDirectionButtons(event)
@@ -1254,7 +1253,7 @@ function removeAllUpgrades(event)
 	if frame then -- This shouldn't ever be required but won't hurt to check
 		if global.emitterConfigGUIs ~= nil
 			and global.emitterConfigGUIs["I" .. event.element.player_index] ~= nil
-			and global.emitterConfigGUIs["I" .. event.element.player_index][1]["1"].valid then
+			and global.emitterConfigGUIs["I" .. event.element.player_index][1]["entity"].valid then
 			
 			local upgrades = frame.emitterConfigTable.upgrades
 			local count
@@ -1379,20 +1378,20 @@ function verifyAndSetFromGUI(event)
 	
 	if global.emitterConfigGUIs ~= nil
 		and global.emitterConfigGUIs["I" .. event.element.player_index] ~= nil
-		and global.emitterConfigGUIs["I" .. event.element.player_index][1]["1"].valid then
+		and global.emitterConfigGUIs["I" .. event.element.player_index][1]["entity"].valid then
 		
 		local emitterTable = global.emitterConfigGUIs["I" .. event.element.player_index][1]
 		
 		if global.emitterConfigGUIs["I" .. event.element.player_index][2] ~= nil then
 			newDirection = global.emitterConfigGUIs["I" .. event.element.player_index][2]
 		else
-			newDirection = emitterTable["10"]
+			newDirection = emitterTable["direction"]
 		end
 		
 		if global.emitterConfigGUIs["I" .. event.element.player_index][3] ~= nil then
 			newFieldType = global.emitterConfigGUIs["I" .. event.element.player_index][3]
 		else
-			newFieldType = emitterTable["9"]
+			newFieldType = emitterTable["type"]
 		end
 		
 		newDistance = tonumber(emitterConfigTable.distance.emitterDistance.text)
@@ -1443,23 +1442,23 @@ function verifyAndSetFromGUI(event)
 		end
 		
 		if settingsAreGood then
-			if emitterTable["6"] ~= newWidth
-				or emitterTable["7"] ~= newDistance
-				or emitterTable["9"] ~= newFieldType
-				or emitterTable["10"] ~= newDirection then
+			if emitterTable["width"] ~= newWidth
+				or emitterTable["distance"] ~= newDistance
+				or emitterTable["type"] ~= newFieldType
+				or emitterTable["direction"] ~= newDirection then
 				
 				degradeLinkedFields(emitterTable)
-				emitterTable["3"] = nil
-				emitterTable["6"] = newWidth
-				emitterTable["7"] = newDistance
-				emitterTable["9"] = newFieldType
-				emitterTable["10"] = newDirection
-				emitterTable["11"] = nil
+				emitterTable["damaged-fields"] = nil
+				emitterTable["width"] = newWidth
+				emitterTable["distance"] = newDistance
+				emitterTable["type"] = newFieldType
+				emitterTable["direction"] = newDirection
+				emitterTable["generating-fields"] = nil
 				setActive(emitterTable, true)
 			end
 			
-			emitterTable["12"] = newDistanceUpgrades
-			emitterTable["13"] = newWidthUpgrades
+			emitterTable["width-upgrades"] = newDistanceUpgrades
+			emitterTable["distance-upgrades"] = newWidthUpgrades
 			return true
 		end
 	else
@@ -1493,13 +1492,13 @@ function showEmitterGui(emitterTable, playerIndex)
 		local d2Style = "selectbuttons"
 		local d3Style = "selectbuttons"
 		local d4Style = "selectbuttons"
-		if emitterTable["10"] == defines.direction.north then
+		if emitterTable["direction"] == defines.direction.north then
 			d1Style = "selectbuttonsselected"
-		elseif emitterTable["10"] == defines.direction.south then
+		elseif emitterTable["direction"] == defines.direction.south then
 			d2Style = "selectbuttonsselected"
-		elseif emitterTable["10"] == defines.direction.east then
+		elseif emitterTable["direction"] == defines.direction.east then
 			d3Style = "selectbuttonsselected"
-		elseif emitterTable["10"] == defines.direction.south then
+		elseif emitterTable["direction"] == defines.direction.south then
 			d4Style = "selectbuttonsselected"
 		end
 		directions.add({type = "button", name = "directionN", caption = "N", style = d1Style})
@@ -1513,13 +1512,13 @@ function showEmitterGui(emitterTable, playerIndex)
 		local f2Style = "selectbuttons"
 		local f3Style = "selectbuttons"
 		local f4Style = "selectbuttons"
-		if emitterTable["9"] == "blue" .. fieldSuffix then
+		if emitterTable["type"] == "blue" .. fieldSuffix then
 			f1Style = "selectbuttonsselected"
-		elseif emitterTable["9"] == "green" .. fieldSuffix then
+		elseif emitterTable["type"] == "green" .. fieldSuffix then
 			f2Style = "selectbuttonsselected"
-		elseif emitterTable["9"] == "red" .. fieldSuffix then
+		elseif emitterTable["type"] == "red" .. fieldSuffix then
 			f3Style = "selectbuttonsselected"
-		elseif emitterTable["9"] == "purple" .. fieldSuffix then
+		elseif emitterTable["type"] == "purple" .. fieldSuffix then
 			f4Style = "selectbuttonsselected"
 		end
 		fields.add({type = "button", name = "fieldB", caption = "B", style = f1Style})
@@ -1564,22 +1563,22 @@ function showEmitterGui(emitterTable, playerIndex)
 		
 		configTable.add({type = "label", name = "distanceLabel", caption = "Emitter distance:"})
 		local distance = configTable.add({type = "table", name = "distance", colspan = 2})
-		distance.add({type = "textfield", name = "emitterDistance", style = "distancetext"}).text = emitterTable["7"]
+		distance.add({type = "textfield", name = "emitterDistance", style = "distancetext"}).text = emitterTable["distance"]
 		distance.add({type = "label", name = "emitterMaxDistance", caption = "Max: " .. tostring(emitterDefaultDistance + getEmitterBonusDistance(emitterTable)), style = "description_title_label_style"})
 		configTable.add({type = "label", name = "currentWidthLabel", caption = "Emitter width:"})
 		local width = configTable.add({type = "table", name = "width", colspan = 2})
-		width.add({type = "textfield", name = "emitterWidth", style = "distancetext"}).text = emitterTable["6"]
+		width.add({type = "textfield", name = "emitterWidth", style = "distancetext"}).text = emitterTable["width"]
 		width.add({type = "label", name = "emitterMaxWidth", caption = "Max: " .. tostring(emitterDefaultWidth + getEmitterBonusWidth(emitterTable)), style = "description_title_label_style"})
 		configTable.add({type = "label", name = "upgradesLabel", caption = "Upgrades applied:"})
 		
 		local upgrades = configTable.add({type = "table", name = "upgrades", colspan = 2})
-		if emitterTable["12"] ~= 0 then
-			upgrades.add({type = "button", name = "distanceUpgrades", caption = "x" .. tostring(emitterTable["12"]), style = "advanced-circuit"})
+		if emitterTable["width-upgrades"] ~= 0 then
+			upgrades.add({type = "button", name = "distanceUpgrades", caption = "x" .. tostring(emitterTable["width-upgrades"]), style = "advanced-circuit"})
 		else
 			upgrades.add({type = "button", name = "distanceUpgrades", caption = "", style = "noitem"})
 		end
-		if emitterTable["13"] ~= 0 then
-			upgrades.add({type = "button", name = "widthUpgrades", caption = "x" .. tostring(emitterTable["13"]), style = "processing-unit"})
+		if emitterTable["distance-upgrades"] ~= 0 then
+			upgrades.add({type = "button", name = "widthUpgrades", caption = "x" .. tostring(emitterTable["distance-upgrades"]), style = "processing-unit"})
 		else
 			upgrades.add({type = "button", name = "widthUpgrades", caption = "", style = "noitem"})
 		end
