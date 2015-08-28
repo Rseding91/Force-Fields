@@ -1,10 +1,5 @@
 require "defines"
 
--- TODO:
---	refactor findentities calls to one function
---	fix mining emitters when someone has the GUI open
-
-
 local loaded
 local tickRate = 20
 local toolName = "forcefield-tool"
@@ -98,30 +93,31 @@ remote.add_interface("forcefields", {
 		global.ticking = nil
 		global.emitterConfigGUIs = nil
 		game.on_event(defines.events.on_tick, nil)
-		local entities
-		local minx = 0
-		local miny = 0
-		local maxx = 0
-		local maxy = 0
-		for coord in game.get_chunks() do
-			if coord.x < minx then
-				minx = coord.x
-			end
-			if coord.x > maxx then
-				maxx = coord.x
-			end
-			if coord.y < miny then
-				miny = coord.y
-			end
-			if coord.y > maxy then
-				maxy = coord.y
-			end
-		end
-		minx = minx * 32
-		maxx = maxx * 32
-		miny = miny * 32
-		maxy = maxy * 32
+		
     for k,surface in pairs(game.surfaces) do
+      local minx = 0
+      local miny = 0
+      local maxx = 0
+      local maxy = 0
+      for coord in surface.get_chunks() do
+        if coord.x < minx then
+          minx = coord.x
+        end
+        if coord.x > maxx then
+          maxx = coord.x
+        end
+        if coord.y < miny then
+          miny = coord.y
+        end
+        if coord.y > maxy then
+          maxy = coord.y
+        end
+      end
+      minx = minx * 32
+      maxx = maxx * 32
+      miny = miny * 32
+      maxy = maxy * 32
+    
       for name in pairs(forcefieldTypes) do
         for _,v in pairs(surface.find_entities_filtered({area = {{minx, miny}, {maxx, maxy}}, name = name})) do
           v.destroy()
@@ -319,19 +315,21 @@ end
 
 function onForcefieldMined(field, player_index)
 	if player_index ~= nil then
-		local player = game.players[player_index]
+		local player = game.get_player(player_index)
 		if player.character ~= nil then
-			player.character.damage(forcefieldTypes[field.name]["damageWhenMined"], game.forces.player)
+			player.character.damage(forcefieldTypes[field.name]["damageWhenMined"], player.force)
 		end
 	end
+  
 	if global.fields ~= nil then
 		local pos = field.position
-		if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] ~= nil then
-			local emitterTable = global.emitters[global.fields[pos.x][pos.y]]
+    local index = field.surface.index
+		if global.fields[index] ~= nil and global.fields[index][pos.x] ~= nil and global.fields[index][pos.x][pos.y] ~= nil then
+			local emitterTable = global.emitters[global.fields[index][pos.x][pos.y]]
 			if emitterTable then
 				setActive(emitterTable, true)
 			end
-			removeForceFieldID(pos.x, pos.y)
+			removeForceFieldID(index, pos.x, pos.y)
 		end
 	end
 end
@@ -363,7 +361,7 @@ end
 function findEmitter(emitter)
 	if global.emitters ~= nil then
 		for k,v in pairs(global.emitters) do
-			if v["entity"].equals(emitter) then
+			if v["entity"] == emitter then
 				return v
 			end
 		end
@@ -407,18 +405,22 @@ end
 function removeForcefield(field)
 	if global.fields ~= nil then
 		local pos = field.position
-		if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] ~= nil then
-			removeForceFieldID(pos.x, pos.y)
+    local index = field.surface.index
+		if global.fields[index] ~= nil and global.fields[index][pos.x] ~= nil and global.fields[index][pos.x][pos.y] ~= nil then
+			removeForceFieldID(index, pos.x, pos.y)
 		end
 	end
 end
 
-function removeForceFieldID(x, y)
+function removeForceFieldID(index, x, y)
 	-- Does no checking
 
-	global.fields[x][y] = nil
-	if tableIsEmpty(global.fields[x]) then
-		global.fields[x] = nil
+	global.fields[index][x][y] = nil
+	if tableIsEmpty(global.fields[index][x]) then
+		global.fields[index][x] = nil
+    if tableIsEmpty(global.fields[index]) then
+			global.fields[index] = nil
+		end
 		if tableIsEmpty(global.fields) then
 			global.fields = nil
 		end
@@ -428,9 +430,10 @@ end
 function removeDegradingFieldID(fieldID)
 	-- Returns true if the global.degradingFields table isn't empty
 	if global.degradingFields ~= nil then
-		local pos = global.degradingFields[fieldID][2]
+		local pos = global.degradingFields[fieldID]["position"]
+    local surface = global.degradingFields[fieldID]["surface"]
 		table.remove(global.degradingFields, fieldID)
-		local emitters = game.find_entities_filtered({area = {{x = pos.x - maxFieldDistance, y = pos.y - maxFieldDistance}, {x = pos.x + maxFieldDistance, y = pos.y + maxFieldDistance}}, name = emitterName})
+		local emitters = surface.find_entities_filtered({area = {{x = pos.x - maxFieldDistance, y = pos.y - maxFieldDistance}, {x = pos.x + maxFieldDistance, y = pos.y + maxFieldDistance}}, name = emitterName})
 		local emitterTable
 		for _,emitter in pairs(emitters) do
 			emitterTable = findEmitter(emitter)
@@ -450,22 +453,23 @@ function degradeLinkedFields(emitterTable)
 	if global.fields ~= nil then
 		local pos1, xInc, yInc, incTimes = getFieldsArea(emitterTable)
 		local pos2 = {x = pos1.x + (xInc * incTimes), y = pos1.y + (yInc * incTimes)}
+    local surface = emitterTable["entity"].surface
 		local fields
 		if xInc == -1 or yInc == -1 then
-			fields = findForcefieldsArea({pos2, pos1}, true)
+			fields = findForcefieldsArea(surface, {pos2, pos1}, true)
 		else
-			fields = findForcefieldsArea({pos1, pos2}, true)
+			fields = findForcefieldsArea(surface, {pos1, pos2}, true)
 		end
 		
 		if fields then
 			if global.degradingFields == nil then
 				global.degradingFields = {}
 			end
-			
+			local index = surface.index
 			for k,field in pairs(fields) do
 				pos = field.position
-				if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] == emitterTable["emitter-NEI"] then
-					table.insert(global.degradingFields, {[1] = field, [2] = field.position})
+				if global.fields[index] ~= nil and global.fields[index][pos.x] ~= nil and global.fields[index][pos.x][pos.y] == emitterTable["emitter-NEI"] then
+					table.insert(global.degradingFields, {["entity"] = field, ["position"] = field.position, ["surface"] = surface})
 					removeForcefield(field)
 					
 					if global.fields == nil then
@@ -486,13 +490,14 @@ end
 function entityBuilt(event)
 	if event.created_entity.name == toolName then
 		local position = event.created_entity.position
+    local surface = event.created_entity.surface
 		if event.player_index ~= nil then
-			game.players[event.player_index].insert({name = toolName, count = 1})
+			game.get_player(event.player_index).insert({name = toolName, count = 1})
 		else
-			game.create_entity({name = "item-on-ground", position = position, stack = {name = toolName, count = 1}, force = game.forces.player})
+			surface.create_entity({name = "item-on-ground", position = position, stack = {name = toolName, count = 1}})
 		end
 		event.created_entity.destroy()
-		useTool(position, event.player_index)
+		useTool(surface, position, event.player_index)
 	elseif event.created_entity.name == emitterName then
 		onEmitterBuilt(event.created_entity)
 	end
@@ -502,10 +507,11 @@ game.on_event(defines.events.on_built_entity, entityBuilt)
 game.on_event(defines.events.on_robot_built_entity, entityBuilt)
 
 game.on_event(defines.events.on_trigger_created_entity, function(event)
-	if event.entity.name == fieldDamagedTriggerName then
+  if event.entity.name == fieldDamagedTriggerName then
 		local position = event.entity.position
+    local surface = event.entity.surface
 		event.entity.destroy()
-		onForcefieldDamaged(position)
+		onForcefieldDamaged(surface, position)
 	end
 end)
 
@@ -533,7 +539,7 @@ function tick()
 				if emitterTable["disabled"] == false then
 					if emitterTable["build-scan"] ~= nil then
 						-- The function will toggle index 4 if it finishes building fields.
-						if scanAndBuildFields(emitterTable) then
+            if scanAndBuildFields(emitterTable) then
 							shouldRemainActive = true
 						end
 					end
@@ -572,10 +578,10 @@ function tick()
 	if global.degradingFields ~= nil then
 		shouldKeepTicking = true
 		for k,v in pairs(global.degradingFields) do
-			if v[1].valid then
-				v[1].health = v[1].health - (forcefieldTypes[v[1].name]["degradeRate"] * tickRate)
-				if v[1].health == 0 then
-					v[1].destroy()
+			if v["entity"].valid then
+				v["entity"].health = v["entity"].health - (forcefieldTypes[v["entity"].name]["degradeRate"] * tickRate)
+				if v["entity"].health == 0 then
+					v["entity"].destroy()
 					if not removeDegradingFieldID(k) then
 						break
 					end
@@ -590,16 +596,21 @@ function tick()
 	
 	if global.searchDamagedPos ~= nil then
 		shouldKeepTicking = true
-		for sx,ys in pairs(global.searchDamagedPos) do
-			for sy in pairs(ys) do
-				local foundFields = findForcefieldsRadius({x = sx + 0.5, y = sy + 0.5}, 0)
-				if foundFields ~= nil then
-					handleDamagedFields(foundFields)
-				end
-				table.remove(ys, sy)
-			end
-			table.remove(global.searchDamagedPos, sx)
-		end
+    for index,xs in pairs (global.searchDamagedPos) do
+      local surface = game.get_surface(index)
+      for sx,ys in pairs(xs) do
+        for sy in pairs(ys) do
+          local foundFields = findForcefieldsRadius(surface, {x = sx + 0.5, y = sy + 0.5}, 0)
+          if foundFields ~= nil then
+            handleDamagedFields(foundFields)
+          end
+          table.remove(ys, sy)
+        end
+        table.remove(global.searchDamagedPos, sx)
+      end
+      table.remove(global.searchDamagedPos, index)
+    end
+    
 		if #global.searchDamagedPos == 0 then
 			global.searchDamagedPos = nil
 		end
@@ -611,8 +622,8 @@ function tick()
 	end
 end
 
-function useTool(pos, playerIndex)
-	local emitter = game.find_entities_filtered({area = {{x = pos.x - toolRadius, y = pos.y - toolRadius}, {x = pos.x + toolRadius, y = pos.y + toolRadius}}, name = emitterName})
+function useTool(surface, pos, playerIndex)
+	local emitter = surface.find_entities_filtered({area = {{x = pos.x - toolRadius, y = pos.y - toolRadius}, {x = pos.x + toolRadius, y = pos.y + toolRadius}}, name = emitterName})
 	if #emitter ~= 0 then
 		local emitterTable = findEmitter(emitter[1])
 		if emitterTable ~= nil then
@@ -714,7 +725,7 @@ end
 
 function scanAndBuildFields(emitterTable)
 	local builtField
-	
+  
 	if emitterTable["build-tick"] == 0 then
 		local energyBefore = emitterTable["entity"].energy
 		if emitterTable["entity"].energy >= (tickRate * forcefieldTypes[emitterTable["type"]]["energyPerRespawn"] + tickRate * forcefieldTypes[emitterTable["type"]]["energyPerCharge"]) then
@@ -722,7 +733,9 @@ function scanAndBuildFields(emitterTable)
 			local blockingFields = 0
 			local blockingFieldsBefore = 0
 			local direction
-			local playerForce = game.forces.player
+			local force = emitterTable["entity"].force
+      local surface = emitterTable["entity"].surface
+      local index = surface.index
 			
 			if emitterTable["direction"] == defines.direction.north or emitterTable["direction"] == defines.direction.south then
 				direction = defines.direction.east
@@ -733,12 +746,15 @@ function scanAndBuildFields(emitterTable)
 			if global.fields == nil then
 				global.fields = {}
 			end
-			
+      if global.fields[index] == nil then
+        global.fields[index] = {}
+      end
+      
 			for n=1,incTimes do
 				-- If another emitter (or even this one previously) has built a field at this location, skip trying to build there
-				if global.fields[pos.x] == nil or global.fields[pos.x][pos.y] == nil then
-					if game.can_place_entity({name = emitterTable["type"], position = pos, direction = direction}) then
-						local newField = game.create_entity({name = emitterTable["type"], position = pos, force = game.forces.player, direction = direction})
+				if global.fields[index][pos.x] == nil or global.fields[index][pos.x][pos.y] == nil then
+					if surface.can_place_entity({name = emitterTable["type"], position = pos, direction = direction}) then
+						local newField = surface.create_entity({name = emitterTable["type"], position = pos, force = force, direction = direction})
 						
 						newField.health = forcefieldTypes[emitterTable["type"]]["chargeRate"]
 						if emitterTable["generating-fields"] == nil then
@@ -746,10 +762,10 @@ function scanAndBuildFields(emitterTable)
 						end
 						table.insert(emitterTable["generating-fields"], newField)
 						
-						if global.fields[pos.x] == nil then
-							global.fields[pos.x] = {}
+						if global.fields[index][pos.x] == nil then
+							global.fields[index][pos.x] = {}
 						end
-						global.fields[pos.x][pos.y] = emitterTable["emitter-NEI"]
+						global.fields[index][pos.x][pos.y] = emitterTable["emitter-NEI"]
 						
 						builtField = true
 						emitterTable["entity"].energy = emitterTable["entity"].energy -  (tickRate * forcefieldTypes[emitterTable["type"]]["energyPerRespawn"])
@@ -760,28 +776,20 @@ function scanAndBuildFields(emitterTable)
 						end
 						blockingFields = blockingFields + 1
 					else
-						local blockingField = findForcefieldsRadius(pos, 0.4, true)
+						local blockingField = findForcefieldsRadius(surface, pos, 0.4, true)
 						if blockingField ~= nil then
 							if global.degradingFields ~= nil then
 								-- Prevents the emitter from going into extended sleep from "can't build" due to degrading fields (happens most when switching field types)
 								local fpos = blockingField[1].position
 								for _,field in pairs(global.degradingFields) do
-									if field[1].position.x == pos.x and field[1].position.y == pos.y then
+									if field["entity"].position.x == pos.x and field["entity"].position.y == pos.y then
 										builtField = true
 										break
 									end
 								end
 							end
 						else
-							local blockingGhosts = findGhostForcefields(pos, 0.4)
-							if blockingGhosts ~= nil then
-								for _,ghost in pairs(blockingGhosts) do
-									ghost.destroy()
-								end
-								builtField = true
-							else
-								game.create_entity({name = "forcefield-build-damage", position = pos, force = playerForce})
-							end
+							--surface.create_entity({name = "forcefield-build-damage", position = pos, force = force})
 						end
 					end
 				else
@@ -791,10 +799,14 @@ function scanAndBuildFields(emitterTable)
 				pos.y = pos.y + yInc
 			end
 			
+      if tableIsEmpty(global.fields[index]) then
+				global.fields[index] = nil
+			end
+      
 			if tableIsEmpty(global.fields) then
 				global.fields = nil
 			end
-			
+      
 			if blockingFields == incTimes then
 				emitterTable["build-scan"] = nil
 				return false
@@ -876,9 +888,9 @@ function generateFields(emitterTable)
 	end
 end
 
-function findForcefieldsRadius(position, radius, includeFullHealth)
-	local walls = game.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "wall"})
-	local gates = game.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "gate"})
+function findForcefieldsRadius(surface, position, radius, includeFullHealth)
+	local walls = surface.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "wall"})
+	local gates = surface.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "gate"})
 	local foundFields = {}
 	
 	if #walls ~= 0 then
@@ -900,9 +912,9 @@ function findForcefieldsRadius(position, radius, includeFullHealth)
 	end
 end
 
-function findForcefieldsArea(area, includeFullHealth)
-	local walls = game.find_entities_filtered({area = area, type = "wall"})
-	local gates = game.find_entities_filtered({area = area, type = "gate"})
+function findForcefieldsArea(surface, area, includeFullHealth)
+	local walls = surface.find_entities_filtered({area = area, type = "wall"})
+	local gates = surface.find_entities_filtered({area = area, type = "gate"})
 	local foundFields = {}
 	
 	if #walls ~= 0 then
@@ -924,8 +936,8 @@ function findForcefieldsArea(area, includeFullHealth)
 	end
 end
 
-function findGhostForcefields(position, radius)
-	local ghosts = game.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "ghost"})
+function findGhostForcefields(surface, position, radius)
+	local ghosts = surface.find_entities_filtered({area = {{x = position.x - radius, y = position.y - radius}, {x = position.x + radius, y = position.y + radius}}, type = "ghost"})
 	if #ghosts ~= 0 then
 		local foundGhosts = {}
 		for i,ghost in pairs(ghosts) do
@@ -937,21 +949,28 @@ function findGhostForcefields(position, radius)
 	end
 end
 
-function onForcefieldDamaged(pos)
-	pos.x = math.floor(pos.x)
+function onForcefieldDamaged(surface, pos)
+	local index = surface.index
+  
+  pos.x = math.floor(pos.x)
 	pos.y = math.floor(pos.y)
 	if global.searchDamagedPos == nil then
 		global.searchDamagedPos = {}
 	end
-	if global.searchDamagedPos[pos.x] == nil then
-		global.searchDamagedPos[pos.x] = {}
+  if global.searchDamagedPos[index] == nil then
+    global.searchDamagedPos[index] = {}
+  end
+	if global.searchDamagedPos[index][pos.x] == nil then
+		global.searchDamagedPos[index][pos.x] = {}
 	end
-	global.searchDamagedPos[pos.x][pos.y] = 1
+	global.searchDamagedPos[index][pos.x][pos.y] = 1
 	activateTicker()
 end
 
 function handleDamagedFields(forceFields)
 	local pos
+  local surface
+  local index
 	local fieldShouldBeAdded
 	local addedFields
 	local fieldID
@@ -960,16 +979,18 @@ function handleDamagedFields(forceFields)
 		-- For each possibly damaged forcefield found
 		for k,field in pairs(forceFields) do
 			pos = field.position
+      surface = field.surface
+      index = surface.index
 			fieldShouldBeAdded = true
 			
 			-- If the field is known to the mod
-			if global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] ~= nil then
-				fieldID = global.fields[pos.x][pos.y]
+			if global.fields[index] ~= nil and global.fields[index][pos.x] ~= nil and global.fields[index][pos.x][pos.y] ~= nil then
+				fieldID = global.fields[index][pos.x][pos.y]
 				-- If the field has a valid linked emitter
 				if global.emitters[fieldID] ~= nil then
 					if global.emitters[fieldID]["generating-fields"] ~= nil then
 						for _,generatingField in pairs(global.emitters[fieldID]["generating-fields"]) do
-							if generatingField.equals(field) then
+							if generatingField == field then
 								fieldShouldBeAdded = false
 								break
 							end
@@ -993,14 +1014,17 @@ end
 
 function onForcefieldDied(field)
 	local pos = field.position
-	if global.fields ~= nil and global.fields[pos.x] ~= nil and global.fields[pos.x][pos.y] ~= nil then
-		local emitterID = global.fields[pos.x][pos.y]
-		removeForceFieldID(pos.x, pos.y)
+  local surface = field.surface
+  local index = surface.index
+  
+	if global.fields ~= nil and global.fields[index] ~= nil and global.fields[index][pos.x] ~= nil and global.fields[index][pos.x][pos.y] ~= nil then
+		local emitterID = global.fields[index][pos.x][pos.y]
+		removeForceFieldID(index, pos.x, pos.y)
 		if global.emitters ~= nil and global.emitters[emitterID] ~= nil then
 			setActive(global.emitters[emitterID], true)
 		end
 		if forcefieldTypes[field.name]["deathEntity"] ~= nil then
-			game.create_entity({name = forcefieldTypes[field.name]["deathEntity"], position = pos, force = game.forces.player})
+			surface.create_entity({name = forcefieldTypes[field.name]["deathEntity"], position = pos, force = field.force})
 		end
 	end
 end
@@ -1043,98 +1067,54 @@ function getEmitterBonusDistance(emitterTable)
 end
 
 function handleGUIDirectionButtons(event)
-	local frame = game.players[event.element.player_index].gui.center.emitterConfig
+  local player = game.get_player(event.player_index)
+	local frame = player.gui.center.emitterConfig
 	local nameToDirection = {["directionN"] = defines.direction.north, ["directionS"] = defines.direction.south, ["directionE"] = defines.direction.east, ["directionW"] = defines.direction.west}
 	
 	if frame ~= nil then
 		local directions = frame.emitterConfigTable.directions
 		global.emitterConfigGUIs["I" .. event.element.player_index][2] = nameToDirection[event.element.name]
 		
-		--broken in 0.11.3
-		--directions.directionN.style = "selectbuttons"
-		--directions.directionS.style = "selectbuttons"
-		--directions.directionE.style = "selectbuttons"
-		--directions.directionW.style = "selectbuttons"
-		--directions[event.element.name].style = "selectbuttonsselected"
-		
-		-- Work-around
-		local selectedButtonName = event.element.name
-		directions.directionN.destroy()
-		directions.directionS.destroy()
-		directions.directionE.destroy()
-		directions.directionW.destroy()
-		
-		local d1Style = "selectbuttons"
-		local d2Style = "selectbuttons"
-		local d3Style = "selectbuttons"
-		local d4Style = "selectbuttons"
-		if selectedButtonName == "directionN" then
-			d1Style = "selectbuttonsselected"
-		elseif selectedButtonName == "directionS" then
-			d2Style = "selectbuttonsselected"
-		elseif selectedButtonName == "directionE" then
-			d3Style = "selectbuttonsselected"
-		elseif selectedButtonName == "directionW" then
-			d4Style = "selectbuttonsselected"
-		end
-		directions.add({type = "button", name = "directionN", caption = "N", style = d1Style})
-		directions.add({type = "button", name = "directionS", caption = "S", style = d2Style})
-		directions.add({type = "button", name = "directionE", caption = "E", style = d3Style})
-		directions.add({type = "button", name = "directionW", caption = "W", style = d4Style})
+		directions.directionN.style = "selectbuttons"
+		directions.directionS.style = "selectbuttons"
+		directions.directionE.style = "selectbuttons"
+		directions.directionW.style = "selectbuttons"
+		directions[event.element.name].style = "selectbuttonsselected"
 	end
 end
 
 function handleGUIFieldTypeButtons(event)
-	local frame = game.players[event.element.player_index].gui.center.emitterConfig
+  local player = game.get_player(event.player_index)
+  local force = player.force
+	local frame = player.gui.center.emitterConfig
 	local nameToFieldName = {["fieldB"] = "blue" .. fieldSuffix, ["fieldG"] = "green" .. fieldSuffix, ["fieldR"] = "red" .. fieldSuffix, ["fieldP"] = "purple" .. fieldSuffix}
 	if frame ~= nil then
 		local fields = frame.emitterConfigTable.fields
 		local shouldSwitch = true
-		
-		--Broken in 0.11.3
-		--fields.fieldB.style = "selectbuttons"
-		--fields.fieldG.style = "selectbuttons"
-		--fields.fieldR.style = "selectbuttons"
-		--fields.fieldP.style = "selectbuttons"
-		--fields[event.element.name].style = "selectbuttonsselected"
-		
-		-- Work around
 		local selectedButtonName = event.element.name
-		local f1Style = "selectbuttons"
-		local f2Style = "selectbuttons"
-		local f3Style = "selectbuttons"
-		local f4Style = "selectbuttons"
-		if selectedButtonName == "fieldB" then
-			f1Style = "selectbuttonsselected"
-		elseif selectedButtonName == "fieldG" then
-			shouldSwitch = game.forces.player.technologies["green-fields"].researched
-			f2Style = "selectbuttonsselected"
+		if selectedButtonName == "fieldG" then
+			shouldSwitch = force.technologies["green-fields"].researched
 		elseif selectedButtonName == "fieldR" then
-			shouldSwitch = game.forces.player.technologies["red-fields"].researched
-			f3Style = "selectbuttonsselected"
+			shouldSwitch = force.technologies["red-fields"].researched
 		elseif selectedButtonName == "fieldP" then
-			shouldSwitch = game.forces.player.technologies["purple-fields"].researched
-			f4Style = "selectbuttonsselected"
+			shouldSwitch = force.technologies["purple-fields"].researched
 		end
 		
 		if shouldSwitch then
 			global.emitterConfigGUIs["I" .. event.element.player_index][3] = nameToFieldName[event.element.name]
-			fields.fieldB.destroy()
-			fields.fieldG.destroy()
-			fields.fieldR.destroy()
-			fields.fieldP.destroy()
-			fields.add({type = "button", name = "fieldB", caption = "B", style = f1Style})
-			fields.add({type = "button", name = "fieldG", caption = "G", style = f2Style})
-			fields.add({type = "button", name = "fieldR", caption = "R", style = f3Style})
-			fields.add({type = "button", name = "fieldP", caption = "P", style = f4Style})
+			fields.fieldB.style = "selectbuttons"
+      fields.fieldG.style = "selectbuttons"
+      fields.fieldR.style = "selectbuttons"
+      fields.fieldP.style = "selectbuttons"
+      fields[event.element.name].style = "selectbuttonsselected"
 		else
-			game.players[event.element.player_index].print("You need to complete research before this field type can be used.")
+			player.print("You need to complete research before this field type can be used.")
 		end
 	end
 end
 
 function handleGUIUpgradeButtons(event)
-	local player = game.players[event.element.player_index]
+	local player = game.get_player(event.element.player_index)
 	local frame = player.gui.center.emitterConfig
 	local nameToStyle = {["distanceUpgrades"] = "advanced-circuit", ["widthUpgrades"] = "processing-unit"}
 	local styleToName = {["advanced-circuit"] = "distanceUpgrades", ["processing-unit"] = "widthUpgrades"}
@@ -1144,13 +1124,12 @@ function handleGUIUpgradeButtons(event)
 		local upgrades = frame.emitterConfigTable.upgrades
 		local upgradeButton
 		local count
-		
-		if player.cursor_stack ~= nil then
-			local stack = player.cursor_stack
-			
+		local stack = player.cursor_stack
+    
+		if stack.valid_for_read then
 			if styleToName[stack.name] ~= nil then
 				upgradeButton = upgrades[styleToName[stack.name]]
-				if upgradeButton.caption ~= "" then
+				if upgradeButton.caption ~= " " then
 					count = tonumber(string.sub(upgradeButton.caption, 2)) + 1
 				else
 					count = 1
@@ -1161,38 +1140,10 @@ function handleGUIUpgradeButtons(event)
 					updateMaxLabel(frame, upgradeButton)
 					
 					if count == 1 then
-						--Broken in 0.11.3
-						--upgradeButton.style = nameToStyle[upgradeButton.name]
-						
-						-- Work-around
-						local distanceCaption = upgrades.distanceUpgrades.caption
-						local widthCaption = upgrades.widthUpgrades.caption
-						local distanceStyle
-						local widthStyle
-						upgrades.distanceUpgrades.destroy()
-						upgrades.widthUpgrades.destroy()
-						
-						if distanceCaption == "" then
-							distanceStyle = "noitem"
-						else
-							distanceStyle = "advanced-circuit"
-						end
-						if widthCaption == "" then
-							widthStyle = "noitem"
-						else
-							widthStyle = "processing-unit"
-						end
-						
-						upgrades.add({type = "button", name = "distanceUpgrades", caption = distanceCaption, style = distanceStyle})
-						upgrades.add({type = "button", name = "widthUpgrades", caption = widthCaption, style = widthStyle})
+						upgradeButton.style = nameToStyle[upgradeButton.name]
 					end
 					
 					stack.count = stack.count - 1
-					if stack.count == 0 then
-						player.cursor_stack = nil
-					else
-						player.cursor_stack = stack
-					end
 				else
 					game.players[event.element.player_index].print("Maximum upgrades of this type already installed.")
 				end
@@ -1200,42 +1151,11 @@ function handleGUIUpgradeButtons(event)
 		else
 			upgradeButton = upgrades[event.element.name]
 			
-			if upgradeButton.caption ~= "" then
+			if upgradeButton.caption ~= " " then
 				count = tonumber(string.sub(upgradeButton.caption, 2)) - 1
 				if count == 0 then
-					--Broken in 0.11.3
-					--upgradeButton.style = "noitem"
-					--upgradeButton.caption = ""
-					
-					-- Work-around
-					local distanceCaption = upgrades.distanceUpgrades.caption
-					local widthCaption = upgrades.widthUpgrades.caption
-					local whichButton = upgradeButton.name
-					local distanceStyle
-					local widthStyle
-					upgrades.distanceUpgrades.destroy()
-					upgrades.widthUpgrades.destroy()
-					
-					if whichButton == "distanceUpgrades" then
-						distanceCaption = ""
-					else
-						widthCaption = ""
-					end
-					
-					if distanceCaption == "" then
-						distanceStyle = "noitem"
-					else
-						distanceStyle = "advanced-circuit"
-					end
-					if widthCaption == "" then
-						widthStyle = "noitem"
-					else
-						widthStyle = "processing-unit"
-					end
-					
-					upgrades.add({type = "button", name = "distanceUpgrades", caption = distanceCaption, style = distanceStyle})
-					upgrades.add({type = "button", name = "widthUpgrades", caption = widthCaption, style = widthStyle})
-					upgradeButton = upgrades[whichButton]
+					upgradeButton.style = "noitem"
+					upgradeButton.caption = " "
 				else
 					upgradeButton.caption = "x" .. tostring(count)
 				end
@@ -1259,15 +1179,10 @@ function removeAllUpgrades(event)
 			local count
 			local buttonName
 			for itemName,button in pairs({["advanced-circuit"] = upgrades.distanceUpgrades, ["processing-unit"] = upgrades.widthUpgrades}) do
-				if button.caption ~= "" then
+				if button.caption ~= " " then
 					count = tonumber(string.sub(button.caption, 2))
-					--bugged in 0.11.3
-					--button.caption = ""
-					--button.style = "noitem"
-					
-					buttonName = button.name
-					button.destroy()
-					button = upgrades.add({type = "button", name = buttonName, caption = "", style = "noitem"})
+					button.caption = " "
+					button.style = "noitem"
 					
 					updateMaxLabel(frame, button)
 					transferToPlayer(game.players[event.element.player_index], {name = itemName, count = count})
@@ -1286,7 +1201,8 @@ function removeAllUpgrades(event)
 end
 
 function handleGUIMenuButtons(event)
-	local frame = game.players[event.element.player_index].gui.center.emitterConfig
+	local player = game.get_player(event.element.player_index)
+  local frame = player.gui.center.emitterConfig
 	if frame ~= nil then
 		if event.element.name == "applyButton" then
 			if verifyAndSetFromGUI(event) then
@@ -1297,7 +1213,7 @@ function handleGUIMenuButtons(event)
 				frame.destroy()
 			end
 		elseif event.element.name == "emitterHelpButton" then
-			printGUIHelp(game.players[event.element.player_index])
+			printGUIHelp(player)
 		elseif event.element.name == "removeAllButton" then
 			removeAllUpgrades(event)
 		end
@@ -1321,7 +1237,7 @@ end
 
 function updateMaxLabel(frame, upgradeButton)
 	local count
-	if upgradeButton.caption == "" then
+	if upgradeButton.caption == " " then
 		count = 0
 	else
 		count = tonumber(string.sub(upgradeButton.caption, 2))
@@ -1398,12 +1314,12 @@ function verifyAndSetFromGUI(event)
 		newWidth = tonumber(emitterConfigTable.width.emitterWidth.text)
 		maxDistance = tonumber(string.sub(emitterConfigTable.distance.emitterMaxDistance.caption, 6))
 		maxWidth = tonumber(string.sub(emitterConfigTable.width.emitterMaxWidth.caption, 6))
-		if upgrades.distanceUpgrades.caption ~= "" then
+		if upgrades.distanceUpgrades.caption ~= " " then
 			newDistanceUpgrades = tonumber(string.sub(upgrades.distanceUpgrades.caption, 2))
 		else
 			newDistanceUpgrades = 0
 		end
-		if upgrades.widthUpgrades.caption ~= "" then
+		if upgrades.widthUpgrades.caption ~= " " then
 			newWidthUpgrades = tonumber(string.sub(upgrades.widthUpgrades.caption, 2))
 		else
 			newWidthUpgrades = 0
@@ -1488,58 +1404,18 @@ function showEmitterGui(emitterTable, playerIndex)
 		configTable.add({type = "label", name = "directionLabel", caption = "Direction:                       "})
 		local directions = configTable.add({type = "table", name = "directions", colspan = 4})
 		
-		local d1Style = "selectbuttons"
-		local d2Style = "selectbuttons"
-		local d3Style = "selectbuttons"
-		local d4Style = "selectbuttons"
-		if emitterTable["direction"] == defines.direction.north then
-			d1Style = "selectbuttonsselected"
-		elseif emitterTable["direction"] == defines.direction.south then
-			d2Style = "selectbuttonsselected"
-		elseif emitterTable["direction"] == defines.direction.east then
-			d3Style = "selectbuttonsselected"
-		elseif emitterTable["direction"] == defines.direction.south then
-			d4Style = "selectbuttonsselected"
-		end
-		directions.add({type = "button", name = "directionN", caption = "N", style = d1Style})
-		directions.add({type = "button", name = "directionS", caption = "S", style = d2Style})
-		directions.add({type = "button", name = "directionE", caption = "E", style = d3Style})
-		directions.add({type = "button", name = "directionW", caption = "W", style = d4Style})
-		
-		configTable.add({type = "label", name = "fieldTypeLabel", caption = "Field type:"})
-		local fields = configTable.add({type = "table", name = "fields", colspan = 4})
-		local f1Style = "selectbuttons"
-		local f2Style = "selectbuttons"
-		local f3Style = "selectbuttons"
-		local f4Style = "selectbuttons"
-		if emitterTable["type"] == "blue" .. fieldSuffix then
-			f1Style = "selectbuttonsselected"
-		elseif emitterTable["type"] == "green" .. fieldSuffix then
-			f2Style = "selectbuttonsselected"
-		elseif emitterTable["type"] == "red" .. fieldSuffix then
-			f3Style = "selectbuttonsselected"
-		elseif emitterTable["type"] == "purple" .. fieldSuffix then
-			f4Style = "selectbuttonsselected"
-		end
-		fields.add({type = "button", name = "fieldB", caption = "B", style = f1Style})
-		fields.add({type = "button", name = "fieldG", caption = "G", style = f2Style})
-		fields.add({type = "button", name = "fieldR", caption = "R", style = f3Style})
-		fields.add({type = "button", name = "fieldP", caption = "P", style = f4Style})
-		
-		-- Non-functional at the moment due to bugs with setting .style in Multiplayer
-		--[[
 		local d1 = directions.add({type = "button", name = "directionN", caption = "N", style = "selectbuttons"})
 		local d2 = directions.add({type = "button", name = "directionS", caption = "S", style = "selectbuttons"})
 		local d3 = directions.add({type = "button", name = "directionE", caption = "E", style = "selectbuttons"})
 		local d4 = directions.add({type = "button", name = "directionW", caption = "W", style = "selectbuttons"})
 		
-		if emitterTable[10] == defines.direction.north then
+		if emitterTable["direction"] == defines.direction.north then
 			d1.style = "selectbuttonsselected"
-		elseif emitterTable[10] == defines.direction.south then
+		elseif emitterTable["direction"] == defines.direction.south then
 			d2.style = "selectbuttonsselected"
-		elseif emitterTable[10] == defines.direction.east then
+		elseif emitterTable["direction"] == defines.direction.east then
 			d3.style = "selectbuttonsselected"
-		elseif emitterTable[10] == defines.direction.south then
+		elseif emitterTable["direction"] == defines.direction.south then
 			d4.style = "selectbuttonsselected"
 		end
 		
@@ -1550,16 +1426,15 @@ function showEmitterGui(emitterTable, playerIndex)
 		local f3 = fields.add({type = "button", name = "fieldR", caption = "R", style = "selectbuttons"})
 		local f4 = fields.add({type = "button", name = "fieldP", caption = "P", style = "selectbuttons"})
 		
-		if emitterTable[9] == "blue" .. fieldSuffix then
+		if emitterTable["type"] == "blue" .. fieldSuffix then
 			f1.style = "selectbuttonsselected"
-		elseif emitterTable[9] == "green" .. fieldSuffix then
+		elseif emitterTable["type"] == "green" .. fieldSuffix then
 			f2.style = "selectbuttonsselected"
-		elseif emitterTable[9] == "red" .. fieldSuffix then
+		elseif emitterTable["type"] == "red" .. fieldSuffix then
 			f3.style = "selectbuttonsselected"
-		elseif emitterTable[9] == "purple" .. fieldSuffix then
+		elseif emitterTable["type"] == "purple" .. fieldSuffix then
 			f4.style = "selectbuttonsselected"
 		end
-		--]]
 		
 		configTable.add({type = "label", name = "distanceLabel", caption = "Emitter distance:"})
 		local distance = configTable.add({type = "table", name = "distance", colspan = 2})
@@ -1575,17 +1450,18 @@ function showEmitterGui(emitterTable, playerIndex)
 		if emitterTable["width-upgrades"] ~= 0 then
 			upgrades.add({type = "button", name = "distanceUpgrades", caption = "x" .. tostring(emitterTable["width-upgrades"]), style = "advanced-circuit"})
 		else
-			upgrades.add({type = "button", name = "distanceUpgrades", caption = "", style = "noitem"})
+			upgrades.add({type = "button", name = "distanceUpgrades", caption = " ", style = "noitem"})
 		end
 		if emitterTable["distance-upgrades"] ~= 0 then
 			upgrades.add({type = "button", name = "widthUpgrades", caption = "x" .. tostring(emitterTable["distance-upgrades"]), style = "processing-unit"})
 		else
-			upgrades.add({type = "button", name = "widthUpgrades", caption = "", style = "noitem"})
+			upgrades.add({type = "button", name = "widthUpgrades", caption = " ", style = "noitem"})
 		end
 		
-		frame.add({type = "button", name = "emitterHelpButton", caption = "?"})
-		frame.add({type = "button", name = "removeAllButton", caption = "Remove all upgrades"})
-		frame.add({type = "button", name = "applyButton", caption = "Apply"})
+    local buttonFlow = frame.add({type = "flow", name = "buttonsFlow", direction = "horizontal"})
+		buttonFlow.add({type = "button", name = "emitterHelpButton", caption = "?"})
+		buttonFlow.add({type = "button", name = "removeAllButton", caption = "Remove all upgrades"})
+		buttonFlow.add({type = "button", name = "applyButton", caption = "Apply"})
 		
 		if global.emitterConfigGUIs == nil then
 			global.emitterConfigGUIs = {}
