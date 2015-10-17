@@ -92,7 +92,7 @@ remote.add_interface("forcefields", {
     global.degradingFields = nil
     global.ticking = nil
     global.emitterConfigGUIs = nil
-    game.on_event(defines.events.on_tick, nil)
+    script.on_event(defines.events.on_tick, nil)
     
     for k,surface in pairs(game.surfaces) do
       local minx = 0
@@ -134,17 +134,6 @@ remote.add_interface("forcefields", {
     end
   end
 })
-
---[[
-game.on_event(defines.events.on_player_created, function(event)
-  for _,player in pairs(game.players) do
-    if player.gui.center.emitterConfig ~= nil then
-      player.gui.center.emitterConfig.destroy()
-    end
-  end
-  global.emitterConfigGUIs = nil
-end)
-]]--
 
 function throwError(what)
   for _,player in pairs(game.players) do
@@ -195,23 +184,27 @@ function verifySettings()
     defaultFieldType = "blue" .. fieldSuffix
     throwError("Emitter default field type isn't known.")
   end
+  
+  global.forcefieldTypes = forcefieldTypes
 end
 
-function on_load()
-  if not loaded then
-    loaded = true
-    if global.ticking then
-      game.on_event(defines.events.on_tick, ticker)
-    end
-    verifySettings()
-    global.version = 1.0
+script.on_configuration_changed(function(data)
+  verifySettings()
+  global.version = 1.0
+end)
+
+script.on_load(function(event)
+  if global.ticking then
+    script.on_event(defines.events.on_tick, ticker)
   end
-end
+end)
 
-game.on_load(on_load)
-game.on_init(on_load)
+script.on_init(function(event)
+  verifySettings()
+  global.version = 1.0
+end)
 
-game.on_event(defines.events.on_preplayer_mined_item, function(event)
+script.on_event(defines.events.on_preplayer_mined_item, function(event)
   if forcefieldTypes[event.entity.name] ~= nil then
     onForcefieldMined(event.entity, event.player_index)
   elseif event.entity.name == emitterName then
@@ -219,13 +212,13 @@ game.on_event(defines.events.on_preplayer_mined_item, function(event)
   end
 end)
 
-game.on_event(defines.events.on_robot_pre_mined, function(event)
+script.on_event(defines.events.on_robot_pre_mined, function(event)
   if event.entity.name == emitterName then
     onEmitterMined(event.entity)
   end
 end)
 
-game.on_event(defines.events.on_entity_died, function(event)
+script.on_event(defines.events.on_entity_died, function(event)
   if forcefieldTypes[event.entity.name] ~= nil then
     onForcefieldDied(event.entity)
   elseif event.entity.name == emitterName then
@@ -233,7 +226,7 @@ game.on_event(defines.events.on_entity_died, function(event)
   end
 end)
 
-game.on_event(defines.events.on_marked_for_deconstruction, function(event)
+script.on_event(defines.events.on_marked_for_deconstruction, function(event)
   if event.entity.name == emitterName then
     local emitterTable = findEmitter(event.entity)
     if emitterTable ~= nil then
@@ -243,7 +236,7 @@ game.on_event(defines.events.on_marked_for_deconstruction, function(event)
   end
 end)
 
-game.on_event(defines.events.on_canceled_deconstruction, function(event)
+script.on_event(defines.events.on_canceled_deconstruction, function(event)
   if event.entity.name == emitterName then
     local emitterTable = findEmitter(event.entity)
     if emitterTable ~= nil then
@@ -503,10 +496,10 @@ function entityBuilt(event)
   end
 end
 
-game.on_event(defines.events.on_built_entity, entityBuilt)
-game.on_event(defines.events.on_robot_built_entity, entityBuilt)
+script.on_event(defines.events.on_built_entity, entityBuilt)
+script.on_event(defines.events.on_robot_built_entity, entityBuilt)
 
-game.on_event(defines.events.on_trigger_created_entity, function(event)
+script.on_event(defines.events.on_trigger_created_entity, function(event)
   if event.entity.name == fieldDamagedTriggerName then
     local position = event.entity.position
     local surface = event.entity.surface
@@ -618,7 +611,7 @@ function tick()
   
   if not shouldKeepTicking then
     global.ticking = nil
-    game.on_event(defines.events.on_tick, nil)
+    script.on_event(defines.events.on_tick, nil)
   end
 end
 
@@ -1054,7 +1047,7 @@ end
 function activateTicker()
   if not global.ticking then
     global.ticking = tickRate
-    game.on_event(defines.events.on_tick, ticker)
+    script.on_event(defines.events.on_tick, ticker)
   end
 end
 
@@ -1269,7 +1262,7 @@ local guiNames =
   ["applyButton"] = handleGUIMenuButtons
 }
 
-game.on_event(defines.events.on_gui_click, function(event)
+script.on_event(defines.events.on_gui_click, function(event)
   if guiNames[event.element.name] then
     guiNames[event.element.name](event)
   end
