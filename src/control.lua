@@ -1392,7 +1392,7 @@ function showEmitterGui(emitterTable, playerIndex)
   end
   
   if canOpenGUI and GUICenter and GUICenter.emitterConfig == nil then
-    local frame = GUICenter.add({type = "frame", name = "emitterConfig", caption = game.get_localised_entity_name(emitterName), direction = "vertical", style = frame_caption_label_style})
+    local frame = GUICenter.add({type = "frame", name = "emitterConfig", caption = game.entity_prototypes[emitterName].localised_name, direction = "vertical", style = frame_caption_label_style})
     local configTable = frame.add({type ="table", name = "emitterConfigTable", colspan = 2})
     configTable.add({type = "label", name = "directionLabel", caption = "Direction:                       "})
     local directions = configTable.add({type = "table", name = "directions", colspan = 4})
