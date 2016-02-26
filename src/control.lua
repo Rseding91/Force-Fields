@@ -38,7 +38,8 @@ local forcefieldTypes =
     energyPerCharge = 4200,
     energyPerRespawn = 5000,
     energyPerHealthLost = 17000,
-    damageWhenMined = 20
+    damageWhenMined = 20,
+    maxHealth = 300
   },
   ["green" .. fieldSuffix] =
   {
@@ -48,7 +49,8 @@ local forcefieldTypes =
     energyPerCharge = 4000,
     energyPerRespawn = 20000,
     energyPerHealthLost = 16000,
-    damageWhenMined = 30
+    damageWhenMined = 30,
+    maxHealth = 700
   },
   ["purple" .. fieldSuffix] =
   {
@@ -59,7 +61,8 @@ local forcefieldTypes =
     energyPerRespawn = 10000,
     energyPerHealthLost = 25000,
     damageWhenMined = 15,
-    deathEntity = "forcefield-death-damage"
+    deathEntity = "forcefield-death-damage",
+    maxHealth = 150
   },
   ["red" .. fieldSuffix] =
   {
@@ -69,7 +72,8 @@ local forcefieldTypes =
     energyPerCharge = 10000,
     energyPerRespawn = 50000,
     energyPerHealthLost = 40000,
-    damageWhenMined = 99
+    damageWhenMined = 99,
+    maxHealth = 300
   }
 }
 
@@ -171,21 +175,10 @@ function verifySettings()
     maxFieldDistance = math.max(emitterMaxDistance, emitterMaxWidth)
   end
   
-  local entityPrototypes = game.entity_prototypes
-  for name,fieldTable in pairs(forcefieldTypes) do
-    if entityPrototypes[name] ~= nil then
-      fieldTable["maxHealth"] = entityPrototypes[name].max_health
-    else
-      throwError("Invalid field name defined - no matching prototype exists: " .. name)
-    end
-  end
-  
   if not forcefieldTypes[defaultFieldType] then
     defaultFieldType = "blue" .. fieldSuffix
     throwError("Emitter default field type isn't known.")
   end
-  
-  global.forcefieldTypes = forcefieldTypes
 end
 
 script.on_configuration_changed(function(data)
@@ -782,7 +775,7 @@ function scanAndBuildFields(emitterTable)
                 end
               end
             else
-              --surface.create_entity({name = "forcefield-build-damage", position = pos, force = force})
+              surface.create_entity({name = "forcefield-build-damage", position = pos, force = force})
             end
           end
         else
