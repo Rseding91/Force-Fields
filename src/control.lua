@@ -785,12 +785,14 @@ function scanAndBuildFields(emitterTable)
         pos.y = pos.y + yInc
       end
       
-      if tableIsEmpty(global.fields[index]) then
-        global.fields[index] = nil
-      end
-      
-      if tableIsEmpty(global.fields) then
-        global.fields = nil
+      if global.fields then
+        if tableIsEmpty(global.fields[index]) then
+          global.fields[index] = nil
+        end
+        
+        if tableIsEmpty(global.fields) then
+          global.fields = nil
+        end
       end
       
       if blockingFields == incTimes then
