@@ -1,4 +1,3 @@
-require "defines"
 
 local loaded
 local tickRate = 20
@@ -301,7 +300,7 @@ end
 
 function onForcefieldMined(field, player_index)
   if player_index ~= nil then
-    local player = game.get_player(player_index)
+    local player = game.players[player_index]
     if player.character ~= nil then
       player.character.damage(forcefieldTypes[field.name]["damageWhenMined"], player.force)
     end
@@ -478,7 +477,7 @@ function entityBuilt(event)
     local position = event.created_entity.position
     local surface = event.created_entity.surface
     if event.player_index ~= nil then
-      game.get_player(event.player_index).insert({name = toolName, count = 1})
+      game.players[event.player_index].insert({name = toolName, count = 1})
     else
       surface.create_entity({name = "item-on-ground", position = position, stack = {name = toolName, count = 1}})
     end
@@ -583,7 +582,7 @@ function tick()
   if global.searchDamagedPos ~= nil then
     shouldKeepTicking = true
     for index,xs in pairs (global.searchDamagedPos) do
-      local surface = game.get_surface(index)
+      local surface = game.surfaces[index]
       for sx,ys in pairs(xs) do
         for sy in pairs(ys) do
           local foundFields = findForcefieldsRadius(surface, {x = sx + 0.5, y = sy + 0.5}, 0)
@@ -1055,7 +1054,7 @@ function getEmitterBonusDistance(emitterTable)
 end
 
 function handleGUIDirectionButtons(event)
-  local player = game.get_player(event.player_index)
+  local player = game.players[event.player_index]
   local frame = player.gui.center.emitterConfig
   local nameToDirection = {["directionN"] = defines.direction.north, ["directionS"] = defines.direction.south, ["directionE"] = defines.direction.east, ["directionW"] = defines.direction.west}
   
@@ -1072,7 +1071,7 @@ function handleGUIDirectionButtons(event)
 end
 
 function handleGUIFieldTypeButtons(event)
-  local player = game.get_player(event.player_index)
+  local player = game.players[event.player_index]
   local force = player.force
   local frame = player.gui.center.emitterConfig
   local nameToFieldName = {["fieldB"] = "blue" .. fieldSuffix, ["fieldG"] = "green" .. fieldSuffix, ["fieldR"] = "red" .. fieldSuffix, ["fieldP"] = "purple" .. fieldSuffix}
@@ -1102,7 +1101,7 @@ function handleGUIFieldTypeButtons(event)
 end
 
 function handleGUIUpgradeButtons(event)
-  local player = game.get_player(event.element.player_index)
+  local player = game.players[event.element.player_index]
   local frame = player.gui.center.emitterConfig
   local nameToStyle = {["distanceUpgrades"] = "advanced-circuit", ["widthUpgrades"] = "processing-unit"}
   local styleToName = {["advanced-circuit"] = "distanceUpgrades", ["processing-unit"] = "widthUpgrades"}
@@ -1189,7 +1188,7 @@ function removeAllUpgrades(event)
 end
 
 function handleGUIMenuButtons(event)
-  local player = game.get_player(event.element.player_index)
+  local player = game.players[event.element.player_index]
   local frame = player.gui.center.emitterConfig
   if frame ~= nil then
     if event.element.name == "applyButton" then
