@@ -811,23 +811,25 @@ data:extend(
     subgroup = "forcefields"
   },
   {
-    type = "container",
+    type = "decorative",
     name = "forcefield-tool",
     flags = {"placeable-neutral", "player-creation", "placeable-off-grid"},
-    collision_box = {{-0, 0}, {0, 0}},
-    selection_box = {{-0, 0}, {0, 0}},
+    collision_box = {{0, 0}, {0, 0}},
+    selection_box = {{0, 0}, {0, 0}},
     minable = {hardness = 0.2, mining_time = 0.5, result = "forcefield-tool"},
     max_health = 150,
     drawing_position = {0.5, 0.5},
     inventory_size = 1,
     icon = "__Force Fields__/graphics/config-tool.png",
-    picture =
+    pictures =
     {
-      filename = "__Force Fields__/graphics/config-tool.png",
-      width = 32,
-      height = 32,
-      priority = "extra-high",
-      shift = {0, 0}
+      {
+        filename = "__Force Fields__/graphics/config-tool.png",
+        width = 32,
+        height = 32,
+        priority = "extra-high",
+        shift = {0, 0}
+      }
     }
   },
   {
