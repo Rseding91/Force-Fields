@@ -256,7 +256,7 @@ function dropOnGround(surface, position, dropStack, markForDeconstruction, force
     dropPos = surface.find_non_colliding_position("item-on-ground", position, 50, 0.5)
     if dropPos then
       entity = surface.create_entity({name = "item-on-ground", position = dropPos, stack = {name = dropStack.name, count = 1}})
-      if markForDeconstruction then
+      if entity.valid and markForDeconstruction then
         entity.order_deconstruction(force)
       end
     end
@@ -585,7 +585,7 @@ function tick()
       local surface = game.surfaces[index]
       for sx,ys in pairs(xs) do
         for sy in pairs(ys) do
-          local foundFields = findForcefieldsRadius(surface, {x = sx + 0.5, y = sy + 0.5}, 0)
+          local foundFields = findForcefieldsRadius(surface, {x = sx + 0.5, y = sy + 0.5}, 1)
           if foundFields ~= nil then
             handleDamagedFields(foundFields)
           end
